@@ -1,0 +1,18 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/app ."
+bin = "./tmp/app"
+delay = 1000
+exclude_dir = ["tmp", "static", "client"]
+include_ext = ["go"]
+kill_delay = "0s"
+rerun = false
+
+[log]
+main_only = false
+time = false
+
+[screen]
+clear_on_rebuild = true
