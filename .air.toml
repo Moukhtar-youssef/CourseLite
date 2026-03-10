@@ -2,17 +2,36 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "go build -o ./tmp/app ."
+stop_on_error = true
+cmd = "go build -o ./tmp/app ./cmd/api/main.go"
 bin = "./tmp/app"
 delay = 1000
 exclude_dir = ["tmp", "static", "client"]
 include_ext = ["go"]
-kill_delay = "0s"
+exclude_regex = ["_test.go"]
+exclude_unchanged = false
+follow_symlink = false
+full_bin = ""
+include_dir = []
+kill_delay = "6s"
+log = "build-errors.log"
+send_interrupt = true
 rerun = false
+
+[color]
+app = ""
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
 
 [log]
 main_only = false
-time = false
+time = true
 
 [screen]
 clear_on_rebuild = true
+
+[misc]
+clean_on_exit = true

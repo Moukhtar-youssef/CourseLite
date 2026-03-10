@@ -2,7 +2,7 @@ install:
 	cd client && bun install
 
 build: install
-	go build -o server ./main.go
+	go build -o server ./cmd/api/main.go
 	cd client && bun run build
 
 run: build
