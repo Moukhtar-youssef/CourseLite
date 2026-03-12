@@ -1,11 +1,13 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
 import "./index.css";
-import { BrowserRouter, Route, Routes } from "react-router";
 import { Layout } from "./layout.tsx";
+import { BrowserRouter, Route, Routes } from "react-router";
 import App from "./routes/App.tsx";
 import { About } from "./routes/about.tsx";
 import { Hello } from "./routes/hello.tsx";
+import Login from "./routes/login.tsx";
+import SignUp from "./routes/signup.tsx";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./ThemeProvider.tsx";
 
@@ -27,6 +29,8 @@ createRoot(root).render(
               <Route index element={<App />} />
               <Route path="about" element={<About />} />
               <Route path="hello" element={<Hello />} />
+              <Route path="login" element={<Login />} />
+              <Route path="signup" element={<SignUp />} />
             </Route>
           </Routes>
         </BrowserRouter>

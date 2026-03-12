@@ -1,0 +1,15 @@
+info:
+  name: Get Sessions
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: 127.0.0.1:3000/api/auth/sessions
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

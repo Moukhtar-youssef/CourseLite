@@ -14,12 +14,19 @@ func jsonError(w http.ResponseWriter, msg string, status int) {
 }
 
 func clearCookie(w http.ResponseWriter, name string) {
+	secure := false
+	path := "/"
+	if name == "refresh_token" {
+		secure = true
+		path = "/api/auth/refresh"
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
 		HttpOnly: true,
 		MaxAge:   -1,
-		Path:     "/",
+		Secure:   secure,
+		Path:     path,
 	})
 }
 

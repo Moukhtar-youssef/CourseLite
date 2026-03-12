@@ -71,7 +71,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.issueTokens(w, r.Context(), user.ID.String(), user.Email)
+	h.issueTokens(w, r.Context(), user.ID.String(), user.Email,
+		r.RemoteAddr, r.UserAgent())
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +96,37 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.issueTokens(w, r.Context(), user.ID.String(), user.Email)
+	h.issueTokens(w, r.Context(), user.ID.String(), user.Email, r.RemoteAddr,
+		r.UserAgent())
+}
+
+func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("access_token")
+	if err != nil {
+		jsonError(w, "missing access token", http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := VerifyToken(cookie.Value, h.AccessSecret)
+	if err != nil || claims.Type != "access" {
+		jsonError(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	ClaimsUserID, err := stringToUUID(claims.UserID)
+	if err != nil {
+		jsonError(w, "invalid uuid", http.StatusUnauthorized)
+		return
+	}
+
+	sessions, err := h.DB.GetUserSessions(r.Context(), ClaimsUserID)
+	if err != nil {
+		jsonError(w, "server error", 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(sessions)
 }
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +166,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.DB.DeleteRefreshToken(r.Context(), hash)
-	h.issueTokens(w, r.Context(), claims.UserID, claims.Email)
+	h.issueTokens(w, r.Context(), claims.UserID, claims.Email, r.RemoteAddr,
+		r.UserAgent())
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +216,8 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(body.Password) < 8 {
-		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+		jsonError(w, "password must be at least 8 characters",
+			http.StatusBadRequest)
 		return
 	}
 
@@ -212,7 +245,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) issueTokens(w http.ResponseWriter, ctx context.Context,
-	userID, email string,
+	userID, email, ip, userAgent string,
 ) {
 	accessToken, err := NewAccessToken(userID, email, h.AccessSecret)
 	if err != nil {
@@ -235,6 +268,8 @@ func (h *Handler) issueTokens(w http.ResponseWriter, ctx context.Context,
 		TokenID:   uuid.MustParse(jti),
 		UserID:    UserUUID,
 		TokenHash: HashToken(refreshToken),
+		IpAddress: toPgtypeText(ip),
+		UserAgent: toPgtypeText(userAgent),
 		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
 	})
 

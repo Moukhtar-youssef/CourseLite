@@ -36,9 +36,11 @@ INSERT INTO refresh_tokens (
     token_id,
     user_id,
     token_hash,
-    expires_at
+    expires_at,
+    user_agent,
+    ip_address
 )
-VALUES ($1, $2, $3, $4);
+VALUES ($1, $2, $3, $4,$5,$6);
 
 -- name: RefreshTokenExists :one
 SELECT EXISTS (
@@ -78,3 +80,19 @@ LIMIT 1;
 -- name: DeletePasswordResetToken :exec
 DELETE FROM password_reset_tokens
 WHERE user_id = $1;
+
+-- name: GetUserSessions :many
+SELECT
+    token_id,
+    user_agent,
+    ip_address,
+    created_at,
+    expires_at
+FROM refresh_tokens
+WHERE user_id = $1
+ORDER BY created_at DESC;
+
+-- name: DeleteSession :exec
+DELETE FROM refresh_tokens
+WHERE token_id = $1
+AND user_id = $2;

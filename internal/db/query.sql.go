@@ -18,9 +18,11 @@ INSERT INTO refresh_tokens (
     token_id,
     user_id,
     token_hash,
-    expires_at
+    expires_at,
+    user_agent,
+    ip_address
 )
-VALUES ($1, $2, $3, $4)
+VALUES ($1, $2, $3, $4,$5,$6)
 `
 
 type CreateRefreshTokenParams struct {
@@ -28,6 +30,8 @@ type CreateRefreshTokenParams struct {
 	UserID    uuid.UUID
 	TokenHash string
 	ExpiresAt time.Time
+	UserAgent pgtype.Text
+	IpAddress pgtype.Text
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
@@ -36,6 +40,8 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.UserAgent,
+		arg.IpAddress,
 	)
 	return err
 }
@@ -113,6 +119,22 @@ func (q *Queries) DeleteRefreshToken(ctx context.Context, tokenHash string) erro
 	return err
 }
 
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM refresh_tokens
+WHERE token_id = $1
+AND user_id = $2
+`
+
+type DeleteSessionParams struct {
+	TokenID uuid.UUID
+	UserID  uuid.UUID
+}
+
+func (q *Queries) DeleteSession(ctx context.Context, arg DeleteSessionParams) error {
+	_, err := q.db.Exec(ctx, deleteSession, arg.TokenID, arg.UserID)
+	return err
+}
+
 const emailExists = `-- name: EmailExists :one
 SELECT EXISTS (
     SELECT 1 FROM users WHERE email = $1
@@ -180,6 +202,52 @@ func (q *Queries) GetUserIDByResetToken(ctx context.Context, token string) (uuid
 	var user_id uuid.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const getUserSessions = `-- name: GetUserSessions :many
+SELECT
+    token_id,
+    user_agent,
+    ip_address,
+    created_at,
+    expires_at
+FROM refresh_tokens
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+type GetUserSessionsRow struct {
+	TokenID   uuid.UUID
+	UserAgent pgtype.Text
+	IpAddress pgtype.Text
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+func (q *Queries) GetUserSessions(ctx context.Context, userID uuid.UUID) ([]GetUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, getUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserSessionsRow
+	for rows.Next() {
+		var i GetUserSessionsRow
+		if err := rows.Scan(
+			&i.TokenID,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const refreshTokenExists = `-- name: RefreshTokenExists :one
