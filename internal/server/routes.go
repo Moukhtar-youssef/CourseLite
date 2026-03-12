@@ -18,8 +18,11 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedOrigins: []string{"https://*", "http://*"},
+		AllowedMethods: []string{
+			"GET", "POST", "PUT", "DELETE", "OPTIONS",
+			"PATCH",
+		},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -29,9 +32,8 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Auth handler — receives DB from server so it's never nil
 	authHandler := &auth.Handler{
-		DB:            s.db,
+		DB:            s.Db,
 		AccessSecret:  os.Getenv("ACCESS_SECRET"),
 		RefreshSecret: os.Getenv("REFRESH_SECRET"),
 	}
@@ -39,7 +41,6 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 		r.Mount("/debug", middleware.Profiler())
 	}
 
-	// API routes — all mounted cleanly under /api
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -50,7 +51,6 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 			json.NewEncoder(w).Encode(map[string]string{"message": "hello"})
 		})
 
-		// Public auth routes
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
@@ -61,7 +61,6 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 		})
 	})
 
-	// React SPA — serve static files, fallback to index.html for client-side routing
 	if staticDir != "" {
 		fs := http.FileServer(http.Dir(staticDir))
 		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {

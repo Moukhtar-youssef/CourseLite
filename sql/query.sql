@@ -1,5 +1,3 @@
--- ── Users ─────────────────────────────────────────────────────────────────────
-
 -- name: CreateUser :one
 INSERT INTO users (name, email, password_hash)
 VALUES ($1, $2, $3)
@@ -32,35 +30,44 @@ ON CONFLICT (email)
 DO UPDATE SET name = EXCLUDED.name
 RETURNING *;
 
--- ── Refresh Tokens ────────────────────────────────────────────────────────────
 
 -- name: CreateRefreshToken :exec
-INSERT INTO refresh_tokens (user_id, token, expires_at)
-VALUES ($1, $2, $3);
+INSERT INTO refresh_tokens (
+    token_id,
+    user_id,
+    token_hash,
+    expires_at
+)
+VALUES ($1, $2, $3, $4);
 
 -- name: RefreshTokenExists :one
 SELECT EXISTS (
     SELECT 1 FROM refresh_tokens
     WHERE user_id = $1
-    AND token = $2
+    AND token_hash = $2
     AND expires_at > NOW()
 ) AS exists;
 
 -- name: DeleteRefreshToken :exec
 DELETE FROM refresh_tokens
-WHERE token = $1;
+WHERE token_hash = $1;
 
 -- name: DeleteAllRefreshTokens :exec
 DELETE FROM refresh_tokens
 WHERE user_id = $1;
 
--- ── Password Reset Tokens ─────────────────────────────────────────────────────
+-- name: DeleteAllRefreshTokensExcept :exec
+DELETE FROM refresh_tokens
+WHERE user_id = $1
+AND token_id != $2;
 
 -- name: UpsertPasswordResetToken :exec
 INSERT INTO password_reset_tokens (user_id, token, expires_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id)
-DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at;
+DO UPDATE SET
+    token = EXCLUDED.token,
+    expires_at = EXCLUDED.expires_at;
 
 -- name: GetUserIDByResetToken :one
 SELECT user_id FROM password_reset_tokens

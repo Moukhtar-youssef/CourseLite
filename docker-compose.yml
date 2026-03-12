@@ -11,7 +11,8 @@ services:
       - "5432:5432" # exposes DB to your local machine
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql # auto-runs on first start
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # auto-runs on first start
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U courselite"]
       interval: 5s

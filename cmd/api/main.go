@@ -26,14 +26,17 @@ func gracefulShutdown(
 
 	log.Println("shutting down gracefully, press Ctrl+C again to force")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(),
+		30*time.Second)
 	defer shutdownCancel()
 
 	if err := apiServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("server forced to shutdown: %v", err)
 	}
+	log.Println("Server shutdown")
 
 	dbHandler.Stop()
+	log.Println("Database shutdown")
 
 	log.Println("server exiting")
 	done <- true
@@ -46,7 +49,8 @@ func main() {
 	}
 
 	// Startup gets its own short-lived context — separate from app lifecycle
-	startCtx, startCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	startCtx, startCancel := context.WithTimeout(context.Background(),
+		10*time.Second)
 	defer startCancel()
 
 	dbHandler := handlers.NewDBHandler(os.Getenv("DATABASE_URL"))
@@ -64,7 +68,8 @@ func main() {
 
 	log.Printf("server starting on %s", httpServer.Addr)
 
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := httpServer.ListenAndServe(); err != nil &&
+		err != http.ErrServerClosed {
 		panic(fmt.Sprintf("http server error: %s", err))
 	}
 

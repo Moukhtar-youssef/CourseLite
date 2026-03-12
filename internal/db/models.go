@@ -18,9 +18,15 @@ type PasswordResetToken struct {
 }
 
 type RefreshToken struct {
-	UserID    uuid.UUID
-	Token     string
-	ExpiresAt time.Time
+	TokenID    uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	Revoked    pgtype.Bool
+	ReplacedBy pgtype.UUID
+	UserAgent  pgtype.Text
+	IpAddress  pgtype.Text
 }
 
 type User struct {

@@ -14,25 +14,33 @@ import (
 )
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
-
-INSERT INTO refresh_tokens (user_id, token, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO refresh_tokens (
+    token_id,
+    user_id,
+    token_hash,
+    expires_at
+)
+VALUES ($1, $2, $3, $4)
 `
 
 type CreateRefreshTokenParams struct {
+	TokenID   uuid.UUID
 	UserID    uuid.UUID
-	Token     string
+	TokenHash string
 	ExpiresAt time.Time
 }
 
-// ── Refresh Tokens ────────────────────────────────────────────────────────────
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, createRefreshToken, arg.UserID, arg.Token, arg.ExpiresAt)
+	_, err := q.db.Exec(ctx, createRefreshToken,
+		arg.TokenID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
 	return err
 }
 
 const createUser = `-- name: CreateUser :one
-
 INSERT INTO users (name, email, password_hash)
 VALUES ($1, $2, $3)
 RETURNING id, name, email, password_hash, oauth_provider, oauth_id, created_at
@@ -44,7 +52,6 @@ type CreateUserParams struct {
 	PasswordHash pgtype.Text
 }
 
-// ── Users ─────────────────────────────────────────────────────────────────────
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Name, arg.Email, arg.PasswordHash)
 	var i User
@@ -70,6 +77,22 @@ func (q *Queries) DeleteAllRefreshTokens(ctx context.Context, userID uuid.UUID) 
 	return err
 }
 
+const deleteAllRefreshTokensExcept = `-- name: DeleteAllRefreshTokensExcept :exec
+DELETE FROM refresh_tokens
+WHERE user_id = $1
+AND token_id != $2
+`
+
+type DeleteAllRefreshTokensExceptParams struct {
+	UserID  uuid.UUID
+	TokenID uuid.UUID
+}
+
+func (q *Queries) DeleteAllRefreshTokensExcept(ctx context.Context, arg DeleteAllRefreshTokensExceptParams) error {
+	_, err := q.db.Exec(ctx, deleteAllRefreshTokensExcept, arg.UserID, arg.TokenID)
+	return err
+}
+
 const deletePasswordResetToken = `-- name: DeletePasswordResetToken :exec
 DELETE FROM password_reset_tokens
 WHERE user_id = $1
@@ -82,11 +105,11 @@ func (q *Queries) DeletePasswordResetToken(ctx context.Context, userID uuid.UUID
 
 const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
 DELETE FROM refresh_tokens
-WHERE token = $1
+WHERE token_hash = $1
 `
 
-func (q *Queries) DeleteRefreshToken(ctx context.Context, token string) error {
-	_, err := q.db.Exec(ctx, deleteRefreshToken, token)
+func (q *Queries) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, deleteRefreshToken, tokenHash)
 	return err
 }
 
@@ -163,18 +186,18 @@ const refreshTokenExists = `-- name: RefreshTokenExists :one
 SELECT EXISTS (
     SELECT 1 FROM refresh_tokens
     WHERE user_id = $1
-    AND token = $2
+    AND token_hash = $2
     AND expires_at > NOW()
 ) AS exists
 `
 
 type RefreshTokenExistsParams struct {
-	UserID uuid.UUID
-	Token  string
+	UserID    uuid.UUID
+	TokenHash string
 }
 
 func (q *Queries) RefreshTokenExists(ctx context.Context, arg RefreshTokenExistsParams) (bool, error) {
-	row := q.db.QueryRow(ctx, refreshTokenExists, arg.UserID, arg.Token)
+	row := q.db.QueryRow(ctx, refreshTokenExists, arg.UserID, arg.TokenHash)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -232,11 +255,12 @@ func (q *Queries) UpsertOAuthUser(ctx context.Context, arg UpsertOAuthUserParams
 }
 
 const upsertPasswordResetToken = `-- name: UpsertPasswordResetToken :exec
-
 INSERT INTO password_reset_tokens (user_id, token, expires_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id)
-DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at
+DO UPDATE SET
+    token = EXCLUDED.token,
+    expires_at = EXCLUDED.expires_at
 `
 
 type UpsertPasswordResetTokenParams struct {
@@ -245,7 +269,6 @@ type UpsertPasswordResetTokenParams struct {
 	ExpiresAt time.Time
 }
 
-// ── Password Reset Tokens ─────────────────────────────────────────────────────
 func (q *Queries) UpsertPasswordResetToken(ctx context.Context, arg UpsertPasswordResetTokenParams) error {
 	_, err := q.db.Exec(ctx, upsertPasswordResetToken, arg.UserID, arg.Token, arg.ExpiresAt)
 	return err

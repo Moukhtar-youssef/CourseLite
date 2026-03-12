@@ -3,7 +3,8 @@
 package payment
 
 type Provider interface {
-	// CreateCheckout(courseID, userID, price string) (checkoutURL string, err error)
+	// CreateCheckout(courseID, userID, price string) (checkoutURL string,
+	// 	err error)
 	// HandleWebhook(r *http.Request) (Event, error)
 	// GetSubscriptionStatus(userID string) (Status, error)
 }

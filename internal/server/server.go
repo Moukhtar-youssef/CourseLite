@@ -14,7 +14,7 @@ import (
 
 type Server struct {
 	port int
-	db   *DB.Queries
+	Db   *DB.Queries
 }
 
 func NewServer(db *DB.Queries) *http.Server {
@@ -25,7 +25,7 @@ func NewServer(db *DB.Queries) *http.Server {
 
 	s := &Server{
 		port: port,
-		db:   db,
+		Db:   db,
 	}
 
 	return &http.Server{

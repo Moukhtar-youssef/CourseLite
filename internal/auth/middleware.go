@@ -30,7 +30,7 @@ func Middleware(accessSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Reject refresh tokens — they must never access protected routes
+			// Reject refresh tokens so they must never access protected routes
 			if claims.Type != "access" {
 				jsonError(w, "invalid token type", http.StatusUnauthorized)
 				return
@@ -50,11 +50,11 @@ func GetUser(r *http.Request) *Claims {
 
 // extractToken checks Authorization header first, then HttpOnly cookie
 func extractToken(r *http.Request) string {
-	// Bearer token — for API / mobile clients
+	// Bearer token for API / mobile clients
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
-	// HttpOnly cookie — for browser clients
+	// HttpOnly cookie for browser clients
 	if c, err := r.Cookie("access_token"); err == nil {
 		return c.Value
 	}
