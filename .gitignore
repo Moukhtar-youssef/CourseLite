@@ -22,6 +22,8 @@ go.work.sum
 .vscode/
 .DS_Store
 
+server
+
 *.db
 *.db.*
 *.db-*

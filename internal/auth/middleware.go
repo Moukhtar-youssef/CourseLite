@@ -44,7 +44,11 @@ func Middleware(accessSecret string) func(http.Handler) http.Handler {
 
 // GetUser pulls claims from context in any protected handler
 func GetUser(r *http.Request) *Claims {
-	claims, _ := r.Context().Value(UserClaimsKey).(*Claims)
+	claims, ok := r.Context().Value(UserClaimsKey).(*Claims)
+
+	if !ok {
+		return &Claims{}
+	}
 	return claims
 }
 

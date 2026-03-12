@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// --- Types ---
 export type Theme = "light" | "dark";
 
 const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -9,7 +8,6 @@ const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
   : "light";
 
 interface AppStore {
-  // Theme
   theme: Theme;
   setTheme: (theme: Theme) => void;
 
@@ -19,7 +17,6 @@ interface AppStore {
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
-      // Theme
       theme: systemTheme as Theme,
       setTheme: (theme) => set({ theme }),
       User: "name",
