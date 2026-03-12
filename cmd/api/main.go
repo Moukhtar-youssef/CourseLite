@@ -5,49 +5,69 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/Moukhtar-youssef/CourseLite/internal/handlers"
 	"github.com/Moukhtar-youssef/CourseLite/internal/server"
 	"github.com/joho/godotenv"
 )
 
-func gracefulShutdown(apiServer *http.Server, done chan bool) {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
-
-	<-ctx.Done()
+func gracefulShutdown(
+	apiServer *http.Server,
+	dbHandler *handlers.DBHandler,
+	done chan bool,
+) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	<-sigCh
 
 	log.Println("shutting down gracefully, press Ctrl+C again to force")
-	stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := apiServer.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown with error: %v", err)
+	if err := apiServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("server forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exiting")
+	dbHandler.Stop()
+
+	log.Println("server exiting")
 	done <- true
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	// .env is optional — in production, env vars come from the environment
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found, using environment variables")
 	}
 
-	HttpServer := server.NewServer()
+	// Startup gets its own short-lived context — separate from app lifecycle
+	startCtx, startCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer startCancel()
 
-	done := make(chan bool)
+	dbHandler := handlers.NewDBHandler(os.Getenv("DATABASE_URL"))
 
-	err = HttpServer.ListenAndServe()
-	if err != nil && err != http.ErrServerClosed {
+	queries, err := dbHandler.Start(startCtx)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+
+	httpServer := server.NewServer(queries)
+
+	done := make(chan bool, 1)
+
+	go gracefulShutdown(httpServer, dbHandler, done)
+
+	log.Printf("server starting on %s", httpServer.Addr)
+
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		panic(fmt.Sprintf("http server error: %s", err))
 	}
 
 	<-done
-	log.Println("Graceful shutdown complete.")
+	log.Println("graceful shutdown complete")
 }

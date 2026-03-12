@@ -12,6 +12,8 @@ interface AppStore {
   // Theme
   theme: Theme;
   setTheme: (theme: Theme) => void;
+
+  User: string;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -20,6 +22,7 @@ export const useAppStore = create<AppStore>()(
       // Theme
       theme: systemTheme as Theme,
       setTheme: (theme) => set({ theme }),
+      User: "name",
     }),
     {
       name: "app-store",

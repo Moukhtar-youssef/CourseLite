@@ -1,3 +1,5 @@
+// Package server is a package that contain the main routes and the main struct
+// for server
 package server
 
 import (
@@ -12,9 +14,8 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func (s *Server) RegisterRoutes(STATICDIR string) http.Handler {
+func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
@@ -23,35 +24,55 @@ func (s *Server) RegisterRoutes(STATICDIR string) http.Handler {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
-
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	fs := http.FileServer(http.Dir(STATICDIR))
-	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
-		path := filepath.Join(STATICDIR, r.URL.Path)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			http.ServeFile(w, r, filepath.Join(STATICDIR, "index.html"))
-			return
-		}
-		fs.ServeHTTP(w, r)
+	// Auth handler — receives DB from server so it's never nil
+	authHandler := &auth.Handler{
+		DB:            s.db,
+		AccessSecret:  os.Getenv("ACCESS_SECRET"),
+		RefreshSecret: os.Getenv("REFRESH_SECRET"),
+	}
+	if os.Getenv("MODE") == "dev" {
+		r.Mount("/debug", middleware.Profiler())
+	}
+
+	// API routes — all mounted cleanly under /api
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		})
+		r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"message": "hello"})
+		})
+
+		// Public auth routes
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", authHandler.Register)
+			r.Post("/login", authHandler.Login)
+			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/logout", authHandler.Logout)
+			r.Post("/forgot-password", authHandler.ForgotPassword)
+			r.Post("/reset-password", authHandler.ResetPassword)
+		})
 	})
 
-	authHandler := &auth.Handler{}
-
-	apiRouter := chi.NewRouter()
-	apiRouter.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "hello"})
-	})
-	apiRouter.Post("/auth/register", authHandler.Register)
-	apiRouter.Post("/api/auth/register", authHandler.Register)
-	apiRouter.Post("/api/auth/login", authHandler.Login)
-	apiRouter.Post("/api/auth/refresh", authHandler.Refresh)
-	apiRouter.Post("/api/auth/logout", authHandler.Logout)
-	apiRouter.Post("/api/auth/forgot-password", authHandler.ForgotPassword)
-	apiRouter.Post("/api/auth/reset-password", authHandler.ResetPassword)
-
-	r.Mount("/api", apiRouter)
+	// React SPA — serve static files, fallback to index.html for client-side routing
+	if staticDir != "" {
+		fs := http.FileServer(http.Dir(staticDir))
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			path := filepath.Join(staticDir, filepath.Clean(r.URL.Path))
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+				return
+			}
+			fs.ServeHTTP(w, r)
+		})
+	}
 
 	return r
 }

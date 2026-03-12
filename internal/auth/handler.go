@@ -1,21 +1,52 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/mail"
 	"time"
+
+	DB "github.com/Moukhtar-youssef/CourseLite/internal/db"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Handler struct {
-	DB            *sql.DB
+	DB            *DB.Queries
 	AccessSecret  string
 	RefreshSecret string
 }
 
-// ── Register ────────────────────────────────────────────────────────────────
+// ── pgtype conversion helpers ─────────────────────────────────────────────────
+
+func toPgtypeText(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: true}
+}
+
+func uuidToString(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	b := u.Bytes
+	return fmt.Sprintf(
+		"%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16],
+	)
+}
+
+func stringToUUID(s string) (uuid.UUID, error) {
+	UUID, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	return UUID, nil
+}
+
+// ── Register ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -23,22 +54,33 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonError(w, "invalid request", http.StatusBadRequest)
+		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if body.Email == "" || body.Password == "" || body.Name == "" {
+
+	if body.Name == "" || body.Email == "" || body.Password == "" {
 		jsonError(w, "name, email and password are required", http.StatusBadRequest)
 		return
 	}
+
+	if _, err := mail.ParseAddress(body.Email); err != nil {
+		jsonError(w, "invalid email address", http.StatusBadRequest)
+		return
+	}
+
 	if len(body.Password) < 8 {
 		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
 		return
 	}
 
-	// Check if email already exists
-	var exists bool
-	h.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)`, body.Email).Scan(&exists)
+	exists, err := h.DB.EmailExists(r.Context(), body.Email)
+	if err != nil {
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	if exists {
 		jsonError(w, "email already in use", http.StatusConflict)
 		return
@@ -50,20 +92,20 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userID string
-	err = h.DB.QueryRow(
-		`INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id`,
-		body.Name, body.Email, hash,
-	).Scan(&userID)
+	user, err := h.DB.CreateUser(r.Context(), DB.CreateUserParams{
+		Name:         body.Name,
+		Email:        body.Email,
+		PasswordHash: toPgtypeText(hash),
+	})
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	h.issueTokens(w, userID, body.Email)
+	h.issueTokens(w, r.Context(), user.ID.String(), user.Email)
 }
 
-// ── Login ────────────────────────────────────────────────────────────────────
+// ── Login ─────────────────────────────────────────────────────────────────────
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -71,28 +113,27 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonError(w, "invalid request", http.StatusBadRequest)
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.Email == "" || body.Password == "" {
+		jsonError(w, "email and password are required", http.StatusBadRequest)
 		return
 	}
 
-	var userID, hash string
-	err := h.DB.QueryRow(
-		`SELECT id, password_hash FROM users WHERE email=$1`, body.Email,
-	).Scan(&userID, &hash)
-
+	user, err := h.DB.GetUserByEmail(r.Context(), body.Email)
 	// Same error for wrong email OR wrong password — prevents user enumeration
-	if err != nil || !CheckPassword(body.Password, hash) {
+	if err != nil || !CheckPassword(body.Password, user.PasswordHash.String) {
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	h.issueTokens(w, userID, body.Email)
+	h.issueTokens(w, r.Context(), user.ID.String(), user.Email)
 }
 
-// ── Refresh ──────────────────────────────────────────────────────────────────
+// ── Refresh ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
-	// Read refresh token from HttpOnly cookie only
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
 		jsonError(w, "missing refresh token", http.StatusUnauthorized)
@@ -105,34 +146,36 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check token is still in DB (allows server-side revocation)
-	var stored string
-	err = h.DB.QueryRow(
-		`SELECT token FROM refresh_tokens WHERE user_id=$1 AND token=$2 AND expires_at > NOW()`,
-		claims.UserID, cookie.Value,
-	).Scan(&stored)
+	ClaimsUserID, err := stringToUUID(claims.UserID)
 	if err != nil {
+		jsonError(w, "invalid uuid", http.StatusUnauthorized)
+		return
+	}
+	valid, err := h.DB.RefreshTokenExists(r.Context(), DB.RefreshTokenExistsParams{
+		UserID: ClaimsUserID,
+		Token:  cookie.Value,
+	})
+	if err != nil || !valid {
 		jsonError(w, "refresh token revoked", http.StatusUnauthorized)
 		return
 	}
 
-	// Rotate: delete old, issue new
-	h.DB.Exec(`DELETE FROM refresh_tokens WHERE token=$1`, cookie.Value)
-	h.issueTokens(w, claims.UserID, claims.Email)
+	h.DB.DeleteRefreshToken(r.Context(), cookie.Value)
+	h.issueTokens(w, r.Context(), claims.UserID, claims.Email)
 }
 
-// ── Logout ───────────────────────────────────────────────────────────────────
+// ── Logout ────────────────────────────────────────────────────────────────────
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("refresh_token"); err == nil {
-		h.DB.Exec(`DELETE FROM refresh_tokens WHERE token=$1`, c.Value)
+		h.DB.DeleteRefreshToken(r.Context(), c.Value)
 	}
 	clearCookie(w, "access_token")
 	clearCookie(w, "refresh_token")
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── Password Reset ───────────────────────────────────────────────────────────
+// ── Forgot Password ───────────────────────────────────────────────────────────
 
 func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -140,75 +183,93 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 
-	// Always return 200 — prevents email enumeration
+	// Always respond 200 — prevents email enumeration
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "if that email exists you will receive a reset link",
 	})
 
-	// Check user exists then generate token
-	var userID string
-	err := h.DB.QueryRow(`SELECT id FROM users WHERE email=$1`, body.Email).Scan(&userID)
+	user, err := h.DB.GetUserByEmail(r.Context(), body.Email)
 	if err != nil {
-		return // silently do nothing
+		return // user doesn't exist — silently do nothing
 	}
 
 	token := randomHex(32)
-	h.DB.Exec(
-		`INSERT INTO password_reset_tokens (user_id, token, expires_at)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (user_id) DO UPDATE SET token=$2, expires_at=$3`,
-		userID, token, time.Now().Add(1*time.Hour),
-	)
+	h.DB.UpsertPasswordResetToken(r.Context(), DB.UpsertPasswordResetTokenParams{
+		UserID:    user.ID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
 
-	// TODO: send email with link: https://yourdomain.com/reset-password?token=<token>
+	// TODO: send email — https://domain/reset-password?token=<token>
 }
+
+// ── Reset Password ────────────────────────────────────────────────────────────
 
 func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Token    string `json:"token"`
 		Password string `json:"password"`
 	}
-	json.NewDecoder(r.Body).Decode(&body)
-
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
 	if len(body.Password) < 8 {
 		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
 		return
 	}
 
-	var userID string
-	err := h.DB.QueryRow(
-		`SELECT user_id FROM password_reset_tokens
-         WHERE token=$1 AND expires_at > NOW()`, body.Token,
-	).Scan(&userID)
+	userID, err := h.DB.GetUserIDByResetToken(r.Context(), body.Token)
 	if err != nil {
 		jsonError(w, "invalid or expired token", http.StatusBadRequest)
 		return
 	}
 
-	hash, _ := HashPassword(body.Password)
-	h.DB.Exec(`UPDATE users SET password_hash=$1 WHERE id=$2`, hash, userID)
-	h.DB.Exec(`DELETE FROM password_reset_tokens WHERE user_id=$1`, userID)
+	hash, err := HashPassword(body.Password)
+	if err != nil {
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
-	// Revoke all refresh tokens on password reset — force re-login everywhere
-	h.DB.Exec(`DELETE FROM refresh_tokens WHERE user_id=$1`, userID)
+	h.DB.UpdateUserPassword(r.Context(), DB.UpdateUserPasswordParams{
+		ID:           userID,
+		PasswordHash: toPgtypeText(hash),
+	})
+	h.DB.DeletePasswordResetToken(r.Context(), userID)
+	h.DB.DeleteAllRefreshTokens(r.Context(), userID)
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "password updated"})
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Token issuance ────────────────────────────────────────────────────────────
 
-func (h *Handler) issueTokens(w http.ResponseWriter, userID, email string) {
-	accessToken, _ := NewAccessToken(userID, email, h.AccessSecret)
-	refreshToken, _ := NewRefreshToken(userID, email, h.RefreshSecret)
+func (h *Handler) issueTokens(w http.ResponseWriter, ctx context.Context, userID, email string) {
+	accessToken, err := NewAccessToken(userID, email, h.AccessSecret)
+	if err != nil {
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	refreshToken, err := NewRefreshToken(userID, email, h.RefreshSecret)
+	if err != nil {
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
-	// Store refresh token in DB for revocation support
-	h.DB.Exec(
-		`INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
-		userID, refreshToken, time.Now().Add(7*24*time.Hour),
-	)
+	UserUUID, err := stringToUUID(userID)
+	if err != nil {
+		jsonError(w, "invalid uuid", http.StatusUnauthorized)
+		return
+	}
 
-	// Access token: HttpOnly, short-lived
+	h.DB.CreateRefreshToken(ctx, DB.CreateRefreshTokenParams{
+		UserID:    UserUUID,
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	})
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
@@ -216,18 +277,17 @@ func (h *Handler) issueTokens(w http.ResponseWriter, userID, email string) {
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
-		MaxAge:   60 * 15, // 15 minutes
+		MaxAge:   60 * 15,
 	})
 
-	// Refresh token: HttpOnly, long-lived
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
-		Path:     "/api/auth/refresh", // scoped — only sent on refresh endpoint
-		MaxAge:   60 * 60 * 24 * 7,    // 7 days
+		Path:     "/api/auth/refresh",
+		MaxAge:   60 * 60 * 24 * 7,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -236,6 +296,8 @@ func (h *Handler) issueTokens(w http.ResponseWriter, userID, email string) {
 		"email":   email,
 	})
 }
+
+// ── Low-level helpers ─────────────────────────────────────────────────────────
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
