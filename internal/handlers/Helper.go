@@ -1,11 +1,21 @@
-package auth
+package handlers
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+
+	"github.com/google/uuid"
 )
+
+func stringToUUID(s string) (uuid.UUID, error) {
+	UUID, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	return UUID, nil
+}
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")

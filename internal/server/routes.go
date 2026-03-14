@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Moukhtar-youssef/CourseLite/internal/auth"
+	"github.com/Moukhtar-youssef/CourseLite/internal/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -32,7 +32,7 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	authHandler := &auth.Handler{
+	authHandler := &handlers.AuthHandler{
 		DB:            s.Db,
 		AccessSecret:  os.Getenv("ACCESS_SECRET"),
 		RefreshSecret: os.Getenv("REFRESH_SECRET"),

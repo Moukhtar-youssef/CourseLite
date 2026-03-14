@@ -1,4 +1,4 @@
-package auth
+package handlers
 
 import (
 	"context"
@@ -7,30 +7,18 @@ import (
 	"net/mail"
 	"time"
 
+	"github.com/Moukhtar-youssef/CourseLite/internal/auth"
 	DB "github.com/Moukhtar-youssef/CourseLite/internal/db"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Handler struct {
+type AuthHandler struct {
 	DB            *DB.Queries
 	AccessSecret  string
 	RefreshSecret string
 }
 
-func toPgtypeText(s string) pgtype.Text {
-	return pgtype.Text{String: s, Valid: true}
-}
-
-func stringToUUID(s string) (uuid.UUID, error) {
-	UUID, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	return UUID, nil
-}
-
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
@@ -59,12 +47,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, _ := HashPassword(body.Password)
+	hash, _ := auth.HashPassword(body.Password)
 
 	user, err := h.DB.CreateUser(r.Context(), DB.CreateUserParams{
 		Name:         body.Name,
 		Email:        body.Email,
-		PasswordHash: toPgtypeText(hash),
+		PasswordHash: &hash,
 	})
 	if err != nil {
 		jsonError(w, "server error", 500)
@@ -75,7 +63,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		r.RemoteAddr, r.UserAgent())
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -91,7 +79,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.DB.GetUserByEmail(r.Context(), body.Email)
 	// Same error for wrong email OR wrong password to prevents user enumeration
-	if err != nil || !CheckPassword(body.Password, user.PasswordHash.String) {
+	if err != nil || !auth.CheckPassword(body.Password, *user.PasswordHash) {
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -100,14 +88,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		r.UserAgent())
 }
 
-func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("access_token")
 	if err != nil {
 		jsonError(w, "missing access token", http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := VerifyToken(cookie.Value, h.AccessSecret)
+	claims, err := auth.VerifyToken(cookie.Value, h.AccessSecret)
 	if err != nil || claims.Type != "access" {
 		jsonError(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -129,14 +117,14 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sessions)
 }
 
-func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
 		jsonError(w, "missing refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := VerifyToken(cookie.Value, h.RefreshSecret)
+	claims, err := auth.VerifyToken(cookie.Value, h.RefreshSecret)
 	if err != nil || claims.Type != "refresh" {
 		jsonError(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -147,7 +135,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid uuid", http.StatusUnauthorized)
 		return
 	}
-	hash := HashToken(cookie.Value)
+	hash := auth.HashToken(cookie.Value)
 	valid, err := h.DB.RefreshTokenExists(r.Context(),
 		DB.RefreshTokenExistsParams{
 			UserID:    ClaimsUserID,
@@ -170,16 +158,16 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		r.UserAgent())
 }
 
-func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("refresh_token"); err == nil {
-		h.DB.DeleteRefreshToken(r.Context(), HashToken(c.Value))
+		h.DB.DeleteRefreshToken(r.Context(), auth.HashToken(c.Value))
 	}
 	clearCookie(w, "access_token")
 	clearCookie(w, "refresh_token")
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email string `json:"email"`
 	}
@@ -206,7 +194,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	// TODO: send email — https://domain/reset-password?token=<token>
 }
 
-func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Token    string `json:"token"`
 		Password string `json:"password"`
@@ -227,7 +215,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := HashPassword(body.Password)
+	hash, err := auth.HashPassword(body.Password)
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
@@ -235,7 +223,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	h.DB.UpdateUserPassword(r.Context(), DB.UpdateUserPasswordParams{
 		ID:           userID,
-		PasswordHash: toPgtypeText(hash),
+		PasswordHash: &hash,
 	})
 	h.DB.DeletePasswordResetToken(r.Context(), userID)
 	h.DB.DeleteAllRefreshTokens(r.Context(), userID)
@@ -244,15 +232,15 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "password updated"})
 }
 
-func (h *Handler) issueTokens(w http.ResponseWriter, ctx context.Context,
+func (h *AuthHandler) issueTokens(w http.ResponseWriter, ctx context.Context,
 	userID, email, ip, userAgent string,
 ) {
-	accessToken, err := NewAccessToken(userID, email, h.AccessSecret)
+	accessToken, err := auth.NewAccessToken(userID, email, h.AccessSecret)
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	refreshToken, jti, err := NewRefreshToken(userID, email, h.RefreshSecret)
+	refreshToken, jti, err := auth.NewRefreshToken(userID, email, h.RefreshSecret)
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
@@ -267,9 +255,9 @@ func (h *Handler) issueTokens(w http.ResponseWriter, ctx context.Context,
 	h.DB.CreateRefreshToken(ctx, DB.CreateRefreshTokenParams{
 		TokenID:   uuid.MustParse(jti),
 		UserID:    UserUUID,
-		TokenHash: HashToken(refreshToken),
-		IpAddress: toPgtypeText(ip),
-		UserAgent: toPgtypeText(userAgent),
+		TokenHash: auth.HashToken(refreshToken),
+		IpAddress: &ip,
+		UserAgent: &userAgent,
 		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
 	})
 
