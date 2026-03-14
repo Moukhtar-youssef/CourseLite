@@ -34,7 +34,7 @@ export function Layout() {
             </NavLink>
           ))}
         </div>
-        <div>
+        <div className="flex items-center justify-center gap-2">
           <ModeToggle />
           <NavLink
             to="/login"

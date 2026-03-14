@@ -1,13 +1,15 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "./sql/query.sql"
+    queries: "./sql/queries"
     schema: "./sql/schema.sql"
     gen:
       go:
         package: DB
         out: internal/db
         sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
         overrides:
           - db_type: "uuid"
             go_type:
@@ -17,3 +19,6 @@ sql:
             go_type:
               import: "time"
               type: "Time"
+          - db_type: "text"
+            go_type:
+              type: "string"

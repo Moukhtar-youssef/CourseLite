@@ -8,33 +8,61 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Course struct {
+	CourseID    uuid.UUID `json:"course_id"`
+	Title       string    `json:"title"`
+	Description *string   `json:"description"`
+	CreatorID   uuid.UUID `json:"creator_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CourseEnrollment struct {
+	UserID     uuid.UUID `json:"user_id"`
+	CourseID   uuid.UUID `json:"course_id"`
+	EnrolledAt time.Time `json:"enrolled_at"`
+}
+
+type Lesson struct {
+	LessonID  uuid.UUID `json:"lesson_id"`
+	SectionID uuid.UUID `json:"section_id"`
+	Title     string    `json:"title"`
+	Content   *string   `json:"content"`
+	Position  int32     `json:"position"`
+}
+
 type PasswordResetToken struct {
-	UserID    uuid.UUID
-	Token     string
-	ExpiresAt time.Time
+	UserID    uuid.UUID `json:"user_id"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type RefreshToken struct {
-	TokenID    uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  string
-	ExpiresAt  time.Time
-	CreatedAt  time.Time
-	Revoked    pgtype.Bool
-	ReplacedBy pgtype.UUID
-	UserAgent  pgtype.Text
-	IpAddress  pgtype.Text
+	TokenID    uuid.UUID `json:"token_id"`
+	UserID     uuid.UUID `json:"user_id"`
+	TokenHash  string    `json:"token_hash"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	CreatedAt  time.Time `json:"created_at"`
+	Revoked    *bool     `json:"revoked"`
+	ReplacedBy uuid.UUID `json:"replaced_by"`
+	UserAgent  *string   `json:"user_agent"`
+	IpAddress  *string   `json:"ip_address"`
+}
+
+type Section struct {
+	SectionID uuid.UUID `json:"section_id"`
+	CourseID  uuid.UUID `json:"course_id"`
+	Title     string    `json:"title"`
+	Position  int32     `json:"position"`
 }
 
 type User struct {
-	ID            uuid.UUID
-	Name          string
-	Email         string
-	PasswordHash  pgtype.Text
-	OauthProvider pgtype.Text
-	OauthID       pgtype.Text
-	CreatedAt     time.Time
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Email         string    `json:"email"`
+	PasswordHash  *string   `json:"password_hash"`
+	OauthProvider *string   `json:"oauth_provider"`
+	OauthID       *string   `json:"oauth_id"`
+	CreatedAt     time.Time `json:"created_at"`
 }

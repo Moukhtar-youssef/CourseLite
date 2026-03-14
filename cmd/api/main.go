@@ -43,12 +43,10 @@ func gracefulShutdown(
 }
 
 func main() {
-	// .env is optional — in production, env vars come from the environment
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, using environment variables")
 	}
 
-	// Startup gets its own short-lived context — separate from app lifecycle
 	startCtx, startCancel := context.WithTimeout(context.Background(),
 		10*time.Second)
 	defer startCancel()
