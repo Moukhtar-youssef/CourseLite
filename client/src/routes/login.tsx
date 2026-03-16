@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchLogin } from "@/api";
+import { LoginApi } from "@/api";
 import {
   Card,
   CardContent,
@@ -19,11 +19,14 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [remember, setRemember] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: () => fetchLogin(email, password),
+    mutationFn: () => LoginApi(email, password),
     onSuccess: (data) => {
-      console.log("Login successful:", data);
+      setSuccess("Signin Successful");
+      console.log("Signin successful:", data);
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -82,7 +85,12 @@ export default function Login() {
                   />
                 </div>
                 <div className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox id="remember-me" className="rounded-sm" />
+                  <Checkbox
+                    id="remember-me"
+                    className="rounded-sm"
+                    checked={remember}
+                    onCheckedChange={(checked) => setRemember(checked === true)}
+                  />
                   <Label
                     htmlFor="remember-me"
                     className="cursor-pointer font-normal"
@@ -91,6 +99,7 @@ export default function Login() {
                   </Label>
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
+                {success && <p className="text-sm text-green-500">{success}</p>}
               </div>
             </CardContent>
             <CardFooter className="flex-col gap-2 mt-4">
@@ -99,7 +108,7 @@ export default function Login() {
                 className="w-full"
                 disabled={mutation.isPending}
               >
-                {mutation.isPending ? "Signing in..." : "Login"}
+                {mutation.isPending ? "Signing in..." : "Sign in"}
               </Button>
             </CardFooter>
           </form>

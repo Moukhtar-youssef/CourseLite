@@ -1,3 +1,5 @@
+// Package handlers is a package that contain the handlers for several services
+// e.g. database
 package handlers
 
 import (

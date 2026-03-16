@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash   TEXT,
     oauth_provider  TEXT,
     oauth_id        TEXT,
+    Type            Text NOT NULL DEFAULT "student",
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

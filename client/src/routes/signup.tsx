@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchSignup } from "@/api";
+import { SignupApi } from "@/api";
 import {
   Card,
   CardContent,
@@ -24,7 +24,7 @@ export default function SignUp() {
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => fetchSignup(name, email, password),
+    mutationFn: () => SignupApi(name, email, password),
     onSuccess: (data) => {
       console.log("Signup successful:", data);
     },

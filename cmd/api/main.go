@@ -20,7 +20,7 @@ func gracefulShutdown(
 	dbHandler *handlers.DBHandler,
 	done chan bool,
 ) {
-	sigCh := make(chan os.Signal, 1)
+	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	<-sigCh
 
@@ -60,7 +60,7 @@ func main() {
 
 	httpServer := server.NewServer(queries)
 
-	done := make(chan bool, 1)
+	done := make(chan bool)
 
 	go gracefulShutdown(httpServer, dbHandler, done)
 

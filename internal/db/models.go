@@ -64,5 +64,6 @@ type User struct {
 	PasswordHash  *string   `json:"password_hash"`
 	OauthProvider *string   `json:"oauth_provider"`
 	OauthID       *string   `json:"oauth_id"`
+	Type          string    `json:"type"`
 	CreatedAt     time.Time `json:"created_at"`
 }

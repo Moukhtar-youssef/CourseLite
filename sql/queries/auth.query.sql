@@ -13,6 +13,11 @@ SELECT * FROM users
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetUserType :one 
+SELECT type FROM users
+WHERE id = $1
+LIMIT 1;
+
 -- name: EmailExists :one
 SELECT EXISTS (
     SELECT 1 FROM users WHERE email = $1

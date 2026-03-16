@@ -22,7 +22,7 @@ export async function fetchHello(): Promise<{ message: string }> {
   return data;
 }
 
-export async function fetchLogin(
+export async function LoginApi(
   email: string,
   password: string,
 ): Promise<{ message: string }> {
@@ -33,7 +33,7 @@ export async function fetchLogin(
   return data;
 }
 
-export async function fetchSignup(
+export async function SignupApi(
   name: string,
   email: string,
   password: string,
