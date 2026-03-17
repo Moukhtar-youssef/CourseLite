@@ -1,11 +1,11 @@
 info:
-  name: Refreh Token
+  name: GetAll
   type: http
-  seq: 3
+  seq: 1
 
 http:
-  method: POST
-  url: 127.0.0.1:3000/api/auth/refresh
+  method: GET
+  url: 127.0.0.1:3000/api/courses/
   auth: inherit
 
 settings:

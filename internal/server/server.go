@@ -13,8 +13,10 @@ import (
 )
 
 type Server struct {
-	port int
-	Db   *DB.Queries
+	port          int
+	Db            *DB.Queries
+	AccessSecret  string
+	RefreshSecret string
 }
 
 func NewServer(db *DB.Queries) *http.Server {
@@ -24,8 +26,10 @@ func NewServer(db *DB.Queries) *http.Server {
 	}
 
 	s := &Server{
-		port: port,
-		Db:   db,
+		port:          port,
+		Db:            db,
+		AccessSecret:  os.Getenv("ACCESS_SECRET"),
+		RefreshSecret: os.Getenv("REFRESH_SECRET"),
 	}
 
 	return &http.Server{

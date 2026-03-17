@@ -1,0 +1,15 @@
+info:
+  name: Refreh Token
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: 127.0.0.1:3000/api/auth/refresh
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

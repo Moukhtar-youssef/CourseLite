@@ -10,7 +10,161 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countCourseStudents = `-- name: CountCourseStudents :one
+SELECT COUNT(*) FROM course_enrollments
+WHERE course_id = $1
+`
+
+func (q *Queries) CountCourseStudents(ctx context.Context, courseID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCourseStudents, courseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createCourse = `-- name: CreateCourse :one
+INSERT INTO courses (
+    creator_id,
+    title,
+    slug,
+    description,
+    price,
+    currency,
+    published
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING course_id, creator_id, title, slug, description, price, currency, published, created_at
+`
+
+type CreateCourseParams struct {
+	CreatorID   uuid.UUID `json:"creator_id"`
+	Title       string    `json:"title"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description"`
+	Price       int32     `json:"price"`
+	Currency    string    `json:"currency"`
+	Published   *bool     `json:"published"`
+}
+
+func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Course, error) {
+	row := q.db.QueryRow(ctx, createCourse,
+		arg.CreatorID,
+		arg.Title,
+		arg.Slug,
+		arg.Description,
+		arg.Price,
+		arg.Currency,
+		arg.Published,
+	)
+	var i Course
+	err := row.Scan(
+		&i.CourseID,
+		&i.CreatorID,
+		&i.Title,
+		&i.Slug,
+		&i.Description,
+		&i.Price,
+		&i.Currency,
+		&i.Published,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createLesson = `-- name: CreateLesson :one
+INSERT INTO lessons (
+    section_id,
+    title,
+    content,
+    position
+) VALUES ($1, $2, $3, $4)
+RETURNING lesson_id, section_id, title, content, position
+`
+
+type CreateLessonParams struct {
+	SectionID uuid.UUID `json:"section_id"`
+	Title     string    `json:"title"`
+	Content   *string   `json:"content"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) CreateLesson(ctx context.Context, arg CreateLessonParams) (Lesson, error) {
+	row := q.db.QueryRow(ctx, createLesson,
+		arg.SectionID,
+		arg.Title,
+		arg.Content,
+		arg.Position,
+	)
+	var i Lesson
+	err := row.Scan(
+		&i.LessonID,
+		&i.SectionID,
+		&i.Title,
+		&i.Content,
+		&i.Position,
+	)
+	return i, err
+}
+
+const createSection = `-- name: CreateSection :one
+INSERT INTO sections (
+    course_id,
+    title,
+    position
+) VALUES ($1, $2, $3)
+RETURNING section_id, course_id, title, position, created_at
+`
+
+type CreateSectionParams struct {
+	CourseID uuid.UUID `json:"course_id"`
+	Title    string    `json:"title"`
+	Position int32     `json:"position"`
+}
+
+func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (Section, error) {
+	row := q.db.QueryRow(ctx, createSection, arg.CourseID, arg.Title, arg.Position)
+	var i Section
+	err := row.Scan(
+		&i.SectionID,
+		&i.CourseID,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteCourse = `-- name: DeleteCourse :exec
+DELETE FROM courses
+WHERE course_id = $1
+`
+
+func (q *Queries) DeleteCourse(ctx context.Context, courseID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCourse, courseID)
+	return err
+}
+
+const deleteLesson = `-- name: DeleteLesson :exec
+DELETE FROM lessons
+WHERE lesson_id = $1
+`
+
+func (q *Queries) DeleteLesson(ctx context.Context, lessonID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteLesson, lessonID)
+	return err
+}
+
+const deleteSection = `-- name: DeleteSection :exec
+DELETE FROM sections
+WHERE section_id = $1
+`
+
+func (q *Queries) DeleteSection(ctx context.Context, sectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSection, sectionID)
+	return err
+}
 
 const enrollStudent = `-- name: EnrollStudent :exec
 INSERT INTO course_enrollments (
@@ -29,15 +183,92 @@ func (q *Queries) EnrollStudent(ctx context.Context, arg EnrollStudentParams) er
 	return err
 }
 
+const getAllCourses = `-- name: GetAllCourses :many
+SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
+`
+
+func (q *Queries) GetAllCourses(ctx context.Context) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getAllCourses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCourseByID = `-- name: GetCourseByID :one
+SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
+WHERE course_id = $1
+`
+
+func (q *Queries) GetCourseByID(ctx context.Context, courseID uuid.UUID) (Course, error) {
+	row := q.db.QueryRow(ctx, getCourseByID, courseID)
+	var i Course
+	err := row.Scan(
+		&i.CourseID,
+		&i.CreatorID,
+		&i.Title,
+		&i.Slug,
+		&i.Description,
+		&i.Price,
+		&i.Currency,
+		&i.Published,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCourseBySlug = `-- name: GetCourseBySlug :one
+SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
+WHERE slug = $1
+`
+
+func (q *Queries) GetCourseBySlug(ctx context.Context, slug string) (Course, error) {
+	row := q.db.QueryRow(ctx, getCourseBySlug, slug)
+	var i Course
+	err := row.Scan(
+		&i.CourseID,
+		&i.CreatorID,
+		&i.Title,
+		&i.Slug,
+		&i.Description,
+		&i.Price,
+		&i.Currency,
+		&i.Published,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getCourseLessons = `-- name: GetCourseLessons :many
 SELECT
     s.section_id,
-    s.title AS section_title,
+    s.title      AS section_title,
     l.lesson_id,
-    l.title AS lesson_title
+    l.title      AS lesson_title
 FROM sections s
-JOIN lessons l
-ON l.section_id = s.section_id
+JOIN lessons l ON l.section_id = s.section_id
 WHERE s.course_id = $1
 ORDER BY s.position, l.position
 `
@@ -74,6 +305,38 @@ func (q *Queries) GetCourseLessons(ctx context.Context, courseID uuid.UUID) ([]G
 	return items, nil
 }
 
+const getCourseSections = `-- name: GetCourseSections :many
+SELECT section_id, course_id, title, position, created_at FROM sections
+WHERE course_id = $1
+ORDER BY position
+`
+
+func (q *Queries) GetCourseSections(ctx context.Context, courseID uuid.UUID) ([]Section, error) {
+	rows, err := q.db.Query(ctx, getCourseSections, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Section
+	for rows.Next() {
+		var i Section
+		if err := rows.Scan(
+			&i.SectionID,
+			&i.CourseID,
+			&i.Title,
+			&i.Position,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCourseStudents = `-- name: GetCourseStudents :many
 SELECT
     u.id,
@@ -81,8 +344,7 @@ SELECT
     u.email,
     ce.enrolled_at
 FROM users u
-JOIN course_enrollments ce
-ON ce.user_id = u.id
+JOIN course_enrollments ce ON ce.user_id = u.id
 WHERE ce.course_id = $1
 `
 
@@ -118,6 +380,176 @@ func (q *Queries) GetCourseStudents(ctx context.Context, courseID uuid.UUID) ([]
 	return items, nil
 }
 
+const getCourseWithSectionsAndLessons = `-- name: GetCourseWithSectionsAndLessons :many
+SELECT
+    c.course_id,
+    c.title        AS course_title,
+    c.description,
+    c.published,
+    s.section_id,
+    s.title        AS section_title,
+    s.position     AS section_position,
+    l.lesson_id,
+    l.title        AS lesson_title,
+    l.position     AS lesson_position,
+    l.content
+FROM courses c
+LEFT JOIN sections s ON s.course_id    = c.course_id
+LEFT JOIN lessons  l ON l.section_id   = s.section_id
+WHERE c.course_id = $1
+ORDER BY s.position, l.position
+`
+
+type GetCourseWithSectionsAndLessonsRow struct {
+	CourseID        uuid.UUID   `json:"course_id"`
+	CourseTitle     string      `json:"course_title"`
+	Description     *string     `json:"description"`
+	Published       *bool       `json:"published"`
+	SectionID       pgtype.UUID `json:"section_id"`
+	SectionTitle    *string     `json:"section_title"`
+	SectionPosition *int32      `json:"section_position"`
+	LessonID        pgtype.UUID `json:"lesson_id"`
+	LessonTitle     *string     `json:"lesson_title"`
+	LessonPosition  *int32      `json:"lesson_position"`
+	Content         *string     `json:"content"`
+}
+
+func (q *Queries) GetCourseWithSectionsAndLessons(ctx context.Context, courseID uuid.UUID) ([]GetCourseWithSectionsAndLessonsRow, error) {
+	rows, err := q.db.Query(ctx, getCourseWithSectionsAndLessons, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCourseWithSectionsAndLessonsRow
+	for rows.Next() {
+		var i GetCourseWithSectionsAndLessonsRow
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CourseTitle,
+			&i.Description,
+			&i.Published,
+			&i.SectionID,
+			&i.SectionTitle,
+			&i.SectionPosition,
+			&i.LessonID,
+			&i.LessonTitle,
+			&i.LessonPosition,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getInstructorCourses = `-- name: GetInstructorCourses :many
+SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
+WHERE creator_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetInstructorCourses(ctx context.Context, creatorID uuid.UUID) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getInstructorCourses, creatorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLessonByID = `-- name: GetLessonByID :one
+SELECT lesson_id, section_id, title, content, position FROM lessons
+WHERE lesson_id = $1
+`
+
+func (q *Queries) GetLessonByID(ctx context.Context, lessonID uuid.UUID) (Lesson, error) {
+	row := q.db.QueryRow(ctx, getLessonByID, lessonID)
+	var i Lesson
+	err := row.Scan(
+		&i.LessonID,
+		&i.SectionID,
+		&i.Title,
+		&i.Content,
+		&i.Position,
+	)
+	return i, err
+}
+
+const getSectionByID = `-- name: GetSectionByID :one
+SELECT section_id, course_id, title, position, created_at FROM sections
+WHERE section_id = $1
+`
+
+func (q *Queries) GetSectionByID(ctx context.Context, sectionID uuid.UUID) (Section, error) {
+	row := q.db.QueryRow(ctx, getSectionByID, sectionID)
+	var i Section
+	err := row.Scan(
+		&i.SectionID,
+		&i.CourseID,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSectionLessons = `-- name: GetSectionLessons :many
+SELECT lesson_id, section_id, title, content, position FROM lessons
+WHERE section_id = $1
+ORDER BY position
+`
+
+func (q *Queries) GetSectionLessons(ctx context.Context, sectionID uuid.UUID) ([]Lesson, error) {
+	rows, err := q.db.Query(ctx, getSectionLessons, sectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Lesson
+	for rows.Next() {
+		var i Lesson
+		if err := rows.Scan(
+			&i.LessonID,
+			&i.SectionID,
+			&i.Title,
+			&i.Content,
+			&i.Position,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStudentCourses = `-- name: GetStudentCourses :many
 SELECT
     c.course_id,
@@ -126,8 +558,7 @@ SELECT
     c.creator_id,
     ce.enrolled_at
 FROM courses c
-JOIN course_enrollments ce
-ON ce.course_id = c.course_id
+JOIN course_enrollments ce ON ce.course_id = c.course_id
 WHERE ce.user_id = $1
 ORDER BY ce.enrolled_at DESC
 `
@@ -173,10 +604,8 @@ SELECT
     u.name AS instructor,
     ce.enrolled_at
 FROM course_enrollments ce
-JOIN courses c
-    ON ce.course_id = c.course_id
-JOIN users u
-    ON u.id = c.creator_id
+JOIN courses c ON ce.course_id = c.course_id
+JOIN users u   ON u.id = c.creator_id
 WHERE ce.user_id = $1
 `
 
@@ -216,8 +645,8 @@ const isStudentEnrolled = `-- name: IsStudentEnrolled :one
 SELECT EXISTS (
     SELECT 1
     FROM course_enrollments
-    WHERE user_id = $1
-    AND course_id = $2
+    WHERE user_id  = $1
+    AND   course_id = $2
 )
 `
 
@@ -231,4 +660,147 @@ func (q *Queries) IsStudentEnrolled(ctx context.Context, arg IsStudentEnrolledPa
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const publishCourse = `-- name: PublishCourse :exec
+UPDATE courses SET published = true
+WHERE course_id = $1
+`
+
+func (q *Queries) PublishCourse(ctx context.Context, courseID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, publishCourse, courseID)
+	return err
+}
+
+const unenrollStudent = `-- name: UnenrollStudent :exec
+DELETE FROM course_enrollments
+WHERE user_id = $1 AND course_id = $2
+`
+
+type UnenrollStudentParams struct {
+	UserID   uuid.UUID `json:"user_id"`
+	CourseID uuid.UUID `json:"course_id"`
+}
+
+func (q *Queries) UnenrollStudent(ctx context.Context, arg UnenrollStudentParams) error {
+	_, err := q.db.Exec(ctx, unenrollStudent, arg.UserID, arg.CourseID)
+	return err
+}
+
+const unpublishCourse = `-- name: UnpublishCourse :exec
+UPDATE courses SET published = false
+WHERE course_id = $1
+`
+
+func (q *Queries) UnpublishCourse(ctx context.Context, courseID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, unpublishCourse, courseID)
+	return err
+}
+
+const updateCourse = `-- name: UpdateCourse :one
+UPDATE courses SET
+    title       = $2,
+    slug        = $3,
+    description = $4,
+    price       = $5,
+    currency    = $6,
+    published   = $7
+WHERE course_id = $1
+RETURNING course_id, creator_id, title, slug, description, price, currency, published, created_at
+`
+
+type UpdateCourseParams struct {
+	CourseID    uuid.UUID `json:"course_id"`
+	Title       string    `json:"title"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description"`
+	Price       int32     `json:"price"`
+	Currency    string    `json:"currency"`
+	Published   *bool     `json:"published"`
+}
+
+func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Course, error) {
+	row := q.db.QueryRow(ctx, updateCourse,
+		arg.CourseID,
+		arg.Title,
+		arg.Slug,
+		arg.Description,
+		arg.Price,
+		arg.Currency,
+		arg.Published,
+	)
+	var i Course
+	err := row.Scan(
+		&i.CourseID,
+		&i.CreatorID,
+		&i.Title,
+		&i.Slug,
+		&i.Description,
+		&i.Price,
+		&i.Currency,
+		&i.Published,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateLesson = `-- name: UpdateLesson :one
+UPDATE lessons SET
+    title    = $2,
+    content  = $3,
+    position = $4
+WHERE lesson_id = $1
+RETURNING lesson_id, section_id, title, content, position
+`
+
+type UpdateLessonParams struct {
+	LessonID uuid.UUID `json:"lesson_id"`
+	Title    string    `json:"title"`
+	Content  *string   `json:"content"`
+	Position int32     `json:"position"`
+}
+
+func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (Lesson, error) {
+	row := q.db.QueryRow(ctx, updateLesson,
+		arg.LessonID,
+		arg.Title,
+		arg.Content,
+		arg.Position,
+	)
+	var i Lesson
+	err := row.Scan(
+		&i.LessonID,
+		&i.SectionID,
+		&i.Title,
+		&i.Content,
+		&i.Position,
+	)
+	return i, err
+}
+
+const updateSection = `-- name: UpdateSection :one
+UPDATE sections SET
+    title    = $2,
+    position = $3
+WHERE section_id = $1
+RETURNING section_id, course_id, title, position, created_at
+`
+
+type UpdateSectionParams struct {
+	SectionID uuid.UUID `json:"section_id"`
+	Title     string    `json:"title"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (Section, error) {
+	row := q.db.QueryRow(ctx, updateSection, arg.SectionID, arg.Title, arg.Position)
+	var i Section
+	err := row.Scan(
+		&i.SectionID,
+		&i.CourseID,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
 }

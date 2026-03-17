@@ -13,8 +13,8 @@ SELECT * FROM users
 WHERE id = $1
 LIMIT 1;
 
--- name: GetUserType :one 
-SELECT type FROM users
+-- name: GetUserRole :one 
+SELECT role FROM users
 WHERE id = $1
 LIMIT 1;
 

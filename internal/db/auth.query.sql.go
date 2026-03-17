@@ -48,7 +48,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, name, email, password_hash, oauth_provider, oauth_id, type, created_at
+RETURNING id, name, email, password_hash, oauth_provider, oauth_id, role, created_at
 `
 
 type CreateUserParams struct {
@@ -67,7 +67,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PasswordHash,
 		&i.OauthProvider,
 		&i.OauthID,
-		&i.Type,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -149,7 +149,7 @@ func (q *Queries) EmailExists(ctx context.Context, email string) (bool, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, oauth_provider, oauth_id, type, created_at FROM users
+SELECT id, name, email, password_hash, oauth_provider, oauth_id, role, created_at FROM users
 WHERE email = $1
 LIMIT 1
 `
@@ -164,14 +164,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PasswordHash,
 		&i.OauthProvider,
 		&i.OauthID,
-		&i.Type,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, oauth_provider, oauth_id, type, created_at FROM users
+SELECT id, name, email, password_hash, oauth_provider, oauth_id, role, created_at FROM users
 WHERE id = $1
 LIMIT 1
 `
@@ -186,7 +186,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.PasswordHash,
 		&i.OauthProvider,
 		&i.OauthID,
-		&i.Type,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -204,6 +204,19 @@ func (q *Queries) GetUserIDByResetToken(ctx context.Context, token string) (uuid
 	var user_id uuid.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const getUserRole = `-- name: GetUserRole :one
+SELECT role FROM users
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserRole(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserRole, id)
+	var role string
+	err := row.Scan(&role)
+	return role, err
 }
 
 const getUserSessions = `-- name: GetUserSessions :many
@@ -252,19 +265,6 @@ func (q *Queries) GetUserSessions(ctx context.Context, userID uuid.UUID) ([]GetU
 	return items, nil
 }
 
-const getUserType = `-- name: GetUserType :one
-SELECT type FROM users
-WHERE id = $1
-LIMIT 1
-`
-
-func (q *Queries) GetUserType(ctx context.Context, id uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getUserType, id)
-	var type_ string
-	err := row.Scan(&type_)
-	return type_, err
-}
-
 const refreshTokenExists = `-- name: RefreshTokenExists :one
 SELECT EXISTS (
     SELECT 1 FROM refresh_tokens
@@ -307,7 +307,7 @@ INSERT INTO users (name, email, oauth_provider, oauth_id)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (email)
 DO UPDATE SET name = EXCLUDED.name
-RETURNING id, name, email, password_hash, oauth_provider, oauth_id, type, created_at
+RETURNING id, name, email, password_hash, oauth_provider, oauth_id, role, created_at
 `
 
 type UpsertOAuthUserParams struct {
@@ -332,7 +332,7 @@ func (q *Queries) UpsertOAuthUser(ctx context.Context, arg UpsertOAuthUserParams
 		&i.PasswordHash,
 		&i.OauthProvider,
 		&i.OauthID,
-		&i.Type,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err

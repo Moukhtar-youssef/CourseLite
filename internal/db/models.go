@@ -8,20 +8,28 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Course struct {
 	CourseID    uuid.UUID `json:"course_id"`
-	Title       string    `json:"title"`
-	Description *string   `json:"description"`
 	CreatorID   uuid.UUID `json:"creator_id"`
+	Title       string    `json:"title"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description"`
+	Price       int32     `json:"price"`
+	Currency    string    `json:"currency"`
+	Published   *bool     `json:"published"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
 type CourseEnrollment struct {
-	UserID     uuid.UUID `json:"user_id"`
-	CourseID   uuid.UUID `json:"course_id"`
-	EnrolledAt time.Time `json:"enrolled_at"`
+	EnrollmentID uuid.UUID          `json:"enrollment_id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	CourseID     uuid.UUID          `json:"course_id"`
+	EnrolledAt   time.Time          `json:"enrolled_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	PaymentID    pgtype.UUID        `json:"payment_id"`
 }
 
 type Lesson struct {
@@ -38,16 +46,34 @@ type PasswordResetToken struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-type RefreshToken struct {
-	TokenID    uuid.UUID `json:"token_id"`
+type Payment struct {
+	PaymentID  uuid.UUID `json:"payment_id"`
 	UserID     uuid.UUID `json:"user_id"`
-	TokenHash  string    `json:"token_hash"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	CourseID   uuid.UUID `json:"course_id"`
+	Provider   string    `json:"provider"`
+	ProviderID string    `json:"provider_id"`
+	Amount     int32     `json:"amount"`
+	Currency   string    `json:"currency"`
+	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
-	Revoked    *bool     `json:"revoked"`
-	ReplacedBy uuid.UUID `json:"replaced_by"`
-	UserAgent  *string   `json:"user_agent"`
-	IpAddress  *string   `json:"ip_address"`
+}
+
+type Progress struct {
+	UserID      uuid.UUID `json:"user_id"`
+	LessonID    uuid.UUID `json:"lesson_id"`
+	CompletedAt time.Time `json:"completed_at"`
+}
+
+type RefreshToken struct {
+	TokenID    uuid.UUID   `json:"token_id"`
+	UserID     uuid.UUID   `json:"user_id"`
+	TokenHash  string      `json:"token_hash"`
+	ExpiresAt  time.Time   `json:"expires_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+	Revoked    *bool       `json:"revoked"`
+	ReplacedBy pgtype.UUID `json:"replaced_by"`
+	UserAgent  *string     `json:"user_agent"`
+	IpAddress  *string     `json:"ip_address"`
 }
 
 type Section struct {
@@ -55,6 +81,7 @@ type Section struct {
 	CourseID  uuid.UUID `json:"course_id"`
 	Title     string    `json:"title"`
 	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type User struct {
@@ -64,6 +91,14 @@ type User struct {
 	PasswordHash  *string   `json:"password_hash"`
 	OauthProvider *string   `json:"oauth_provider"`
 	OauthID       *string   `json:"oauth_id"`
-	Type          string    `json:"type"`
+	Role          string    `json:"role"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type VideoUpload struct {
+	UploadID  uuid.UUID `json:"upload_id"`
+	LessonID  uuid.UUID `json:"lesson_id"`
+	S3Key     string    `json:"s3_key"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }

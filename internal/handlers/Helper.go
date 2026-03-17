@@ -6,23 +6,36 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 )
 
 func stringToUUID(s string) (uuid.UUID, error) {
-	UUID, err := uuid.Parse(s)
+	id, err := uuid.Parse(s)
 	if err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("stringToUUID: invalid UUID %q: %w", s, err)
 	}
-	return UUID, nil
+	return id, nil
 }
 
-func jsonError(w http.ResponseWriter, msg string, status int) {
+func JsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func JsonResponse(w http.ResponseWriter, v any, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+func JsonMessage(w http.ResponseWriter, msg string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"message": msg})
 }
 
 func clearCookie(w http.ResponseWriter, name string) {
@@ -44,6 +57,8 @@ func clearCookie(w http.ResponseWriter, name string) {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("randomHex: crypto/rand unavailable: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
