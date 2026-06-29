@@ -3,8 +3,8 @@ tmp_dir = "tmp"
 
 [build]
 stop_on_error = true
-cmd = "go build -o ./tmp/app ./cmd/api/main.go"
-bin = "./tmp/app"
+cmd = "go build -o ./tmp/server ./cmd/api/main.go"
+bin = "./tmp/server"
 delay = 1000
 exclude_dir = ["tmp", "static", "client", "vendor", "postgres_data"]
 include_ext = ["go"]

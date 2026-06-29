@@ -1,5 +1,5 @@
-// Package server is a package that contain the main routes and the main struct
-// for server
+// Package server provides the HTTP server setup and route registration
+// for the CourseLite application.
 package server
 
 import (
@@ -10,16 +10,23 @@ import (
 	"time"
 
 	DB "github.com/Moukhtar-youssef/CourseLite/internal/db"
+	ratelimiter "github.com/Moukhtar-youssef/CourseLite/pkg/rateLimiter"
 )
 
+// Server holds the configuration for the HTTP server.
 type Server struct {
 	port          int
-	Db            *DB.Queries
 	AccessSecret  string
 	RefreshSecret string
+
+	Db               *DB.Queries
+	HTTPServer       *http.Server
+	RateLimiter      ratelimiter.RateLimiter
+	LoginRateLimiter ratelimiter.RateLimiter
 }
 
-func NewServer(db *DB.Queries) *http.Server {
+// NewServer creates and configures a new HTTP server instance.
+func NewServer(db *DB.Queries) *Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	if port == 0 {
 		port = 8080
@@ -31,12 +38,12 @@ func NewServer(db *DB.Queries) *http.Server {
 		AccessSecret:  os.Getenv("ACCESS_SECRET"),
 		RefreshSecret: os.Getenv("REFRESH_SECRET"),
 	}
-
-	return &http.Server{
+	s.HTTPServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
 		Handler:      s.RegisterRoutes(os.Getenv("STATICDIR")),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
+	return s
 }

@@ -1,5 +1,4 @@
-// Package handlers is a package that contain the handlers for several services
-// e.g. database
+// Package handlers contains HTTP handlers for the CourseLite service layer.
 package handlers
 
 import (
@@ -9,30 +8,25 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/uuid"
+	"github.com/Moukhtar-youssef/CourseLite/internal/auth"
 )
 
-func stringToUUID(s string) (uuid.UUID, error) {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.UUID{}, fmt.Errorf("stringToUUID: invalid UUID %q: %w", s, err)
-	}
-	return id, nil
-}
-
-func JsonError(w http.ResponseWriter, msg string, status int) {
+// JSONError writes a JSON error response with the given message and status code.
+func JSONError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func JsonResponse(w http.ResponseWriter, v any, status int) {
+// JSONResponse writes a JSON response with the given value and status code.
+func JSONResponse(w http.ResponseWriter, v any, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
 
-func JsonMessage(w http.ResponseWriter, msg string, status int) {
+// JSONMessage writes a JSON message response with the given message and status code.
+func JSONMessage(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"message": msg})
@@ -61,4 +55,16 @@ func randomHex(n int) string {
 		panic(fmt.Sprintf("randomHex: crypto/rand unavailable: %v", err))
 	}
 	return hex.EncodeToString(b)
+}
+
+func claimsFromCookie(r *http.Request, secret string) (auth.Claims, error) {
+	cookie, err := r.Cookie("access_token")
+	if err != nil {
+		return auth.Claims{}, err
+	}
+	claims, err := auth.VerifyToken(cookie.Value, secret)
+	if err != nil || claims.Type != "access" {
+		return auth.Claims{}, err
+	}
+	return claims, nil
 }

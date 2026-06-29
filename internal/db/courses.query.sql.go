@@ -14,8 +14,12 @@ import (
 )
 
 const countCourseStudents = `-- name: CountCourseStudents :one
-SELECT COUNT(*) FROM course_enrollments
-WHERE course_id = $1
+SELECT
+    COUNT(*)
+FROM
+    course_enrollments
+WHERE
+    course_id = $1
 `
 
 func (q *Queries) CountCourseStudents(ctx context.Context, courseID uuid.UUID) (int64, error) {
@@ -26,16 +30,10 @@ func (q *Queries) CountCourseStudents(ctx context.Context, courseID uuid.UUID) (
 }
 
 const createCourse = `-- name: CreateCourse :one
-INSERT INTO courses (
-    creator_id,
-    title,
-    slug,
-    description,
-    price,
-    currency,
-    published
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING course_id, creator_id, title, slug, description, price, currency, published, created_at
+INSERT INTO courses (creator_id, title, slug, description, price, currency, published)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
 `
 
 type CreateCourseParams struct {
@@ -45,7 +43,7 @@ type CreateCourseParams struct {
 	Description *string   `json:"description"`
 	Price       int32     `json:"price"`
 	Currency    string    `json:"currency"`
-	Published   *bool     `json:"published"`
+	Published   bool      `json:"published"`
 }
 
 func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Course, error) {
@@ -74,13 +72,10 @@ func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Cou
 }
 
 const createLesson = `-- name: CreateLesson :one
-INSERT INTO lessons (
-    section_id,
-    title,
-    content,
-    position
-) VALUES ($1, $2, $3, $4)
-RETURNING lesson_id, section_id, title, content, position
+INSERT INTO lessons (section_id, title, content, position)
+    VALUES ($1, $2, $3, $4)
+RETURNING
+    lesson_id, section_id, title, content, position
 `
 
 type CreateLessonParams struct {
@@ -109,12 +104,10 @@ func (q *Queries) CreateLesson(ctx context.Context, arg CreateLessonParams) (Les
 }
 
 const createSection = `-- name: CreateSection :one
-INSERT INTO sections (
-    course_id,
-    title,
-    position
-) VALUES ($1, $2, $3)
-RETURNING section_id, course_id, title, position, created_at
+INSERT INTO sections (course_id, title, position)
+    VALUES ($1, $2, $3)
+RETURNING
+    section_id, course_id, title, position, created_at
 `
 
 type CreateSectionParams struct {
@@ -167,10 +160,8 @@ func (q *Queries) DeleteSection(ctx context.Context, sectionID uuid.UUID) error 
 }
 
 const enrollStudent = `-- name: EnrollStudent :exec
-INSERT INTO course_enrollments (
-    user_id,
-    course_id
-) VALUES ($1, $2)
+INSERT INTO course_enrollments (user_id, course_id)
+    VALUES ($1, $2)
 `
 
 type EnrollStudentParams struct {
@@ -184,7 +175,10 @@ func (q *Queries) EnrollStudent(ctx context.Context, arg EnrollStudentParams) er
 }
 
 const getAllCourses = `-- name: GetAllCourses :many
-SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
 `
 
 func (q *Queries) GetAllCourses(ctx context.Context) ([]Course, error) {
@@ -217,9 +211,193 @@ func (q *Queries) GetAllCourses(ctx context.Context) ([]Course, error) {
 	return items, nil
 }
 
+const getAllCoursesPaginatdByPrice = `-- name: GetAllCoursesPaginatdByPrice :many
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+ORDER BY
+    price
+LIMIT $1 OFFSET $2
+`
+
+type GetAllCoursesPaginatdByPriceParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetAllCoursesPaginatdByPrice(ctx context.Context, arg GetAllCoursesPaginatdByPriceParams) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getAllCoursesPaginatdByPrice, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllCoursesPaginated = `-- name: GetAllCoursesPaginated :many
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+ORDER BY
+    course_id
+LIMIT $1 OFFSET $2
+`
+
+type GetAllCoursesPaginatedParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetAllCoursesPaginated(ctx context.Context, arg GetAllCoursesPaginatedParams) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getAllCoursesPaginated, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllCoursesPaginatedByCreatedAt = `-- name: GetAllCoursesPaginatedByCreatedAt :many
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+ORDER BY
+    created_at
+LIMIT $1 OFFSET $2
+`
+
+type GetAllCoursesPaginatedByCreatedAtParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetAllCoursesPaginatedByCreatedAt(ctx context.Context, arg GetAllCoursesPaginatedByCreatedAtParams) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getAllCoursesPaginatedByCreatedAt, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllCoursesPaginatedByTitle = `-- name: GetAllCoursesPaginatedByTitle :many
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+ORDER BY
+    title
+LIMIT $1 OFFSET $2
+`
+
+type GetAllCoursesPaginatedByTitleParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetAllCoursesPaginatedByTitle(ctx context.Context, arg GetAllCoursesPaginatedByTitleParams) ([]Course, error) {
+	rows, err := q.db.Query(ctx, getAllCoursesPaginatedByTitle, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Course
+	for rows.Next() {
+		var i Course
+		if err := rows.Scan(
+			&i.CourseID,
+			&i.CreatorID,
+			&i.Title,
+			&i.Slug,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.Published,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCourseByID = `-- name: GetCourseByID :one
-SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
-WHERE course_id = $1
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+WHERE
+    course_id = $1
 `
 
 func (q *Queries) GetCourseByID(ctx context.Context, courseID uuid.UUID) (Course, error) {
@@ -240,8 +418,12 @@ func (q *Queries) GetCourseByID(ctx context.Context, courseID uuid.UUID) (Course
 }
 
 const getCourseBySlug = `-- name: GetCourseBySlug :one
-SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
-WHERE slug = $1
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+WHERE
+    slug = $1
 `
 
 func (q *Queries) GetCourseBySlug(ctx context.Context, slug string) (Course, error) {
@@ -261,16 +443,36 @@ func (q *Queries) GetCourseBySlug(ctx context.Context, slug string) (Course, err
 	return i, err
 }
 
+const getCourseIDBySlug = `-- name: GetCourseIDBySlug :one
+SELECT
+    course_id
+FROM
+    courses
+WHERE
+    slug = $1
+`
+
+func (q *Queries) GetCourseIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getCourseIDBySlug, slug)
+	var course_id uuid.UUID
+	err := row.Scan(&course_id)
+	return course_id, err
+}
+
 const getCourseLessons = `-- name: GetCourseLessons :many
 SELECT
     s.section_id,
-    s.title      AS section_title,
+    s.title AS section_title,
     l.lesson_id,
-    l.title      AS lesson_title
-FROM sections s
-JOIN lessons l ON l.section_id = s.section_id
-WHERE s.course_id = $1
-ORDER BY s.position, l.position
+    l.title AS lesson_title
+FROM
+    sections s
+    JOIN lessons l ON l.section_id = s.section_id
+WHERE
+    s.course_id = $1
+ORDER BY
+    s.position,
+    l.position
 `
 
 type GetCourseLessonsRow struct {
@@ -306,9 +508,14 @@ func (q *Queries) GetCourseLessons(ctx context.Context, courseID uuid.UUID) ([]G
 }
 
 const getCourseSections = `-- name: GetCourseSections :many
-SELECT section_id, course_id, title, position, created_at FROM sections
-WHERE course_id = $1
-ORDER BY position
+SELECT
+    section_id, course_id, title, position, created_at
+FROM
+    sections
+WHERE
+    course_id = $1
+ORDER BY
+    position
 `
 
 func (q *Queries) GetCourseSections(ctx context.Context, courseID uuid.UUID) ([]Section, error) {
@@ -343,9 +550,11 @@ SELECT
     u.name,
     u.email,
     ce.enrolled_at
-FROM users u
-JOIN course_enrollments ce ON ce.user_id = u.id
-WHERE ce.course_id = $1
+FROM
+    users u
+    JOIN course_enrollments ce ON ce.user_id = u.id
+WHERE
+    ce.course_id = $1
 `
 
 type GetCourseStudentsRow struct {
@@ -383,28 +592,32 @@ func (q *Queries) GetCourseStudents(ctx context.Context, courseID uuid.UUID) ([]
 const getCourseWithSectionsAndLessons = `-- name: GetCourseWithSectionsAndLessons :many
 SELECT
     c.course_id,
-    c.title        AS course_title,
+    c.title AS course_title,
     c.description,
     c.published,
     s.section_id,
-    s.title        AS section_title,
-    s.position     AS section_position,
+    s.title AS section_title,
+    s.position AS section_position,
     l.lesson_id,
-    l.title        AS lesson_title,
-    l.position     AS lesson_position,
+    l.title AS lesson_title,
+    l.position AS lesson_position,
     l.content
-FROM courses c
-LEFT JOIN sections s ON s.course_id    = c.course_id
-LEFT JOIN lessons  l ON l.section_id   = s.section_id
-WHERE c.course_id = $1
-ORDER BY s.position, l.position
+FROM
+    courses c
+    LEFT JOIN sections s ON s.course_id = c.course_id
+    LEFT JOIN lessons l ON l.section_id = s.section_id
+WHERE
+    c.course_id = $1
+ORDER BY
+    s.position,
+    l.position
 `
 
 type GetCourseWithSectionsAndLessonsRow struct {
 	CourseID        uuid.UUID   `json:"course_id"`
 	CourseTitle     string      `json:"course_title"`
 	Description     *string     `json:"description"`
-	Published       *bool       `json:"published"`
+	Published       bool        `json:"published"`
 	SectionID       pgtype.UUID `json:"section_id"`
 	SectionTitle    *string     `json:"section_title"`
 	SectionPosition *int32      `json:"section_position"`
@@ -447,9 +660,14 @@ func (q *Queries) GetCourseWithSectionsAndLessons(ctx context.Context, courseID 
 }
 
 const getInstructorCourses = `-- name: GetInstructorCourses :many
-SELECT course_id, creator_id, title, slug, description, price, currency, published, created_at FROM courses
-WHERE creator_id = $1
-ORDER BY created_at DESC
+SELECT
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
+FROM
+    courses
+WHERE
+    creator_id = $1
+ORDER BY
+    created_at DESC
 `
 
 func (q *Queries) GetInstructorCourses(ctx context.Context, creatorID uuid.UUID) ([]Course, error) {
@@ -483,8 +701,12 @@ func (q *Queries) GetInstructorCourses(ctx context.Context, creatorID uuid.UUID)
 }
 
 const getLessonByID = `-- name: GetLessonByID :one
-SELECT lesson_id, section_id, title, content, position FROM lessons
-WHERE lesson_id = $1
+SELECT
+    lesson_id, section_id, title, content, position
+FROM
+    lessons
+WHERE
+    lesson_id = $1
 `
 
 func (q *Queries) GetLessonByID(ctx context.Context, lessonID uuid.UUID) (Lesson, error) {
@@ -501,8 +723,12 @@ func (q *Queries) GetLessonByID(ctx context.Context, lessonID uuid.UUID) (Lesson
 }
 
 const getSectionByID = `-- name: GetSectionByID :one
-SELECT section_id, course_id, title, position, created_at FROM sections
-WHERE section_id = $1
+SELECT
+    section_id, course_id, title, position, created_at
+FROM
+    sections
+WHERE
+    section_id = $1
 `
 
 func (q *Queries) GetSectionByID(ctx context.Context, sectionID uuid.UUID) (Section, error) {
@@ -519,9 +745,14 @@ func (q *Queries) GetSectionByID(ctx context.Context, sectionID uuid.UUID) (Sect
 }
 
 const getSectionLessons = `-- name: GetSectionLessons :many
-SELECT lesson_id, section_id, title, content, position FROM lessons
-WHERE section_id = $1
-ORDER BY position
+SELECT
+    lesson_id, section_id, title, content, position
+FROM
+    lessons
+WHERE
+    section_id = $1
+ORDER BY
+    position
 `
 
 func (q *Queries) GetSectionLessons(ctx context.Context, sectionID uuid.UUID) ([]Lesson, error) {
@@ -557,10 +788,13 @@ SELECT
     c.description,
     c.creator_id,
     ce.enrolled_at
-FROM courses c
-JOIN course_enrollments ce ON ce.course_id = c.course_id
-WHERE ce.user_id = $1
-ORDER BY ce.enrolled_at DESC
+FROM
+    courses c
+    JOIN course_enrollments ce ON ce.course_id = c.course_id
+WHERE
+    ce.user_id = $1
+ORDER BY
+    ce.enrolled_at DESC
 `
 
 type GetStudentCoursesRow struct {
@@ -603,10 +837,12 @@ SELECT
     c.title,
     u.name AS instructor,
     ce.enrolled_at
-FROM course_enrollments ce
-JOIN courses c ON ce.course_id = c.course_id
-JOIN users u   ON u.id = c.creator_id
-WHERE ce.user_id = $1
+FROM
+    course_enrollments ce
+    JOIN courses c ON ce.course_id = c.course_id
+    JOIN users u ON u.id = c.creator_id
+WHERE
+    ce.user_id = $1
 `
 
 type GetStudentCoursesWithInstructorRow struct {
@@ -642,12 +878,15 @@ func (q *Queries) GetStudentCoursesWithInstructor(ctx context.Context, userID uu
 }
 
 const isStudentEnrolled = `-- name: IsStudentEnrolled :one
-SELECT EXISTS (
-    SELECT 1
-    FROM course_enrollments
-    WHERE user_id  = $1
-    AND   course_id = $2
-)
+SELECT
+    EXISTS (
+        SELECT
+            1
+        FROM
+            course_enrollments
+        WHERE
+            user_id = $1
+            AND course_id = $2)
 `
 
 type IsStudentEnrolledParams struct {
@@ -663,8 +902,12 @@ func (q *Queries) IsStudentEnrolled(ctx context.Context, arg IsStudentEnrolledPa
 }
 
 const publishCourse = `-- name: PublishCourse :exec
-UPDATE courses SET published = true
-WHERE course_id = $1
+UPDATE
+    courses
+SET
+    published = TRUE
+WHERE
+    course_id = $1
 `
 
 func (q *Queries) PublishCourse(ctx context.Context, courseID uuid.UUID) error {
@@ -674,7 +917,8 @@ func (q *Queries) PublishCourse(ctx context.Context, courseID uuid.UUID) error {
 
 const unenrollStudent = `-- name: UnenrollStudent :exec
 DELETE FROM course_enrollments
-WHERE user_id = $1 AND course_id = $2
+WHERE user_id = $1
+    AND course_id = $2
 `
 
 type UnenrollStudentParams struct {
@@ -688,8 +932,12 @@ func (q *Queries) UnenrollStudent(ctx context.Context, arg UnenrollStudentParams
 }
 
 const unpublishCourse = `-- name: UnpublishCourse :exec
-UPDATE courses SET published = false
-WHERE course_id = $1
+UPDATE
+    courses
+SET
+    published = FALSE
+WHERE
+    course_id = $1
 `
 
 func (q *Queries) UnpublishCourse(ctx context.Context, courseID uuid.UUID) error {
@@ -698,15 +946,19 @@ func (q *Queries) UnpublishCourse(ctx context.Context, courseID uuid.UUID) error
 }
 
 const updateCourse = `-- name: UpdateCourse :one
-UPDATE courses SET
-    title       = $2,
-    slug        = $3,
+UPDATE
+    courses
+SET
+    title = $2,
+    slug = $3,
     description = $4,
-    price       = $5,
-    currency    = $6,
-    published   = $7
-WHERE course_id = $1
-RETURNING course_id, creator_id, title, slug, description, price, currency, published, created_at
+    price = $5,
+    currency = $6,
+    published = $7
+WHERE
+    course_id = $1
+RETURNING
+    course_id, creator_id, title, slug, description, price, currency, published, created_at
 `
 
 type UpdateCourseParams struct {
@@ -716,7 +968,7 @@ type UpdateCourseParams struct {
 	Description *string   `json:"description"`
 	Price       int32     `json:"price"`
 	Currency    string    `json:"currency"`
-	Published   *bool     `json:"published"`
+	Published   bool      `json:"published"`
 }
 
 func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Course, error) {
@@ -745,12 +997,16 @@ func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Cou
 }
 
 const updateLesson = `-- name: UpdateLesson :one
-UPDATE lessons SET
-    title    = $2,
-    content  = $3,
+UPDATE
+    lessons
+SET
+    title = $2,
+    content = $3,
     position = $4
-WHERE lesson_id = $1
-RETURNING lesson_id, section_id, title, content, position
+WHERE
+    lesson_id = $1
+RETURNING
+    lesson_id, section_id, title, content, position
 `
 
 type UpdateLessonParams struct {
@@ -779,11 +1035,15 @@ func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (Les
 }
 
 const updateSection = `-- name: UpdateSection :one
-UPDATE sections SET
-    title    = $2,
+UPDATE
+    sections
+SET
+    title = $2,
     position = $3
-WHERE section_id = $1
-RETURNING section_id, course_id, title, position, created_at
+WHERE
+    section_id = $1
+RETURNING
+    section_id, course_id, title, position, created_at
 `
 
 type UpdateSectionParams struct {

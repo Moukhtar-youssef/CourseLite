@@ -17,8 +17,8 @@ type entry struct {
 	timestamps []time.Time
 }
 
-// LocalRateLimiter is a thread-safe, in-process sliding-window rate limiter.
-type LocalRateLimiter struct {
+// RateLimiter is a thread-safe, in-process sliding-window rate limiter.
+type RateLimiter struct {
 	cfg    ratelimiter.Config
 	mu     sync.RWMutex
 	store  map[string]*entry
@@ -27,8 +27,8 @@ type LocalRateLimiter struct {
 
 // New creates a LocalRateLimiter and starts a background goroutine that
 // periodically evicts stale keys to prevent unbounded memory growth.
-func New(cfg ratelimiter.Config) *LocalRateLimiter {
-	l := &LocalRateLimiter{
+func New(cfg ratelimiter.Config) *RateLimiter {
+	l := &RateLimiter{
 		cfg:    cfg,
 		store:  make(map[string]*entry),
 		stopCh: make(chan struct{}),
@@ -40,7 +40,7 @@ func New(cfg ratelimiter.Config) *LocalRateLimiter {
 // Allow implements ratelimiter.RateLimiter using a sliding window algorithm.
 // It records the current timestamp and counts how many requests fall within
 // the configured window, then decides whether to allow or deny.
-func (l *LocalRateLimiter) Allow(_ context.Context, key string,
+func (l *RateLimiter) Allow(_ context.Context, key string,
 ) (ratelimiter.Result, error) {
 	fullKey := l.cfg.KeyPrefix + key
 	now := time.Now()
@@ -92,7 +92,7 @@ func (l *LocalRateLimiter) Allow(_ context.Context, key string,
 
 // Reset removes all recorded timestamps for key, immediately restoring
 // the full quota. Useful for tests or admin operations.
-func (l *LocalRateLimiter) Reset(_ context.Context, key string) error {
+func (l *RateLimiter) Reset(_ context.Context, key string) error {
 	fullKey := l.cfg.KeyPrefix + key
 
 	l.mu.Lock()
@@ -107,16 +107,18 @@ func (l *LocalRateLimiter) Reset(_ context.Context, key string) error {
 }
 
 // Close stops the background cleanup goroutine and releases memory.
-func (l *LocalRateLimiter) Close() error {
+func (l *RateLimiter) Close() error {
 	close(l.stopCh)
 	l.mu.Lock()
-	l.store = nil
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	for k := range l.store {
+		delete(l.store, k)
+	}
 	return nil
 }
 
 // getOrCreate retrieves or lazily initialises the entry for fullKey.
-func (l *LocalRateLimiter) getOrCreate(fullKey string) *entry {
+func (l *RateLimiter) getOrCreate(fullKey string) *entry {
 	l.mu.RLock()
 	e, ok := l.store[fullKey]
 	l.mu.RUnlock()
@@ -137,7 +139,7 @@ func (l *LocalRateLimiter) getOrCreate(fullKey string) *entry {
 
 // cleanup runs every window duration and removes keys whose last request
 // is older than one window, keeping memory bounded.
-func (l *LocalRateLimiter) cleanup() {
+func (l *RateLimiter) cleanup() {
 	ticker := time.NewTicker(l.cfg.Window)
 	defer ticker.Stop()
 

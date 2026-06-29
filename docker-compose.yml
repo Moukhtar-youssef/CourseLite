@@ -1,23 +1,38 @@
 services:
+  app:
+    build: .
+    container_name: courselite_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - ${PORT}:${PORT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: courselite_db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: courselite
-      POSTGRES_PASSWORD: courselite
-      POSTGRES_DB: courselite
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432" # exposes DB to your local machine
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-      # auto-runs on first start
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U courselite"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
+  valkey:
+    image: valkey/valkey:9-alpine
 
 volumes:
   postgres_data:

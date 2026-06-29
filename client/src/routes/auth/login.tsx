@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SignupApi } from "@/api";
+import { auth } from "@/api";
 import {
   Card,
   CardContent,
@@ -11,22 +11,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { NavLink } from "react-router";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
-export default function SignUp() {
-  const [name, setName] = useState("");
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [remember, setRemember] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: () => SignupApi(name, email, password),
+    mutationFn: () => auth.login(email, password),
     onSuccess: (data) => {
-      console.log("Signup successful:", data);
+      setSuccess("Signin Successful");
+      console.log("Signin successful:", data);
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -35,12 +35,6 @@ export default function SignUp() {
 
   const handleSubmit: React.SubmitEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
     setError(null);
     mutation.mutate();
   };
@@ -51,26 +45,15 @@ export default function SignUp() {
         <Card className="rounded-xl">
           <CardHeader>
             <CardTitle className="text-center text-2xl font-semibold">
-              Create an account
+              Welcome back!
             </CardTitle>
             <CardDescription className="text-center text-base">
-              Sign up to start using the platform.
+              Sign in to your account to continue.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent>
               <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    required
-                  />
-                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -83,7 +66,15 @@ export default function SignUp() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <div className="flex items-center">
+                    <Label htmlFor="password">Password</Label>
+                    <NavLink
+                      to="#"
+                      className="text-xs ml-auto underline-offset-4 hover:underline"
+                    >
+                      Forgot password?
+                    </NavLink>
+                  </div>
                   <Input
                     id="password"
                     type="password"
@@ -93,32 +84,22 @@ export default function SignUp() {
                     required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="confirmPassword">Re-type password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Re-type password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
-                </div>
                 <div className="flex items-center gap-2 cursor-pointer">
                   <Checkbox
-                    id="remember"
+                    id="remember-me"
                     className="rounded-sm"
                     checked={remember}
                     onCheckedChange={(checked) => setRemember(checked === true)}
                   />
                   <Label
-                    htmlFor="remember"
+                    htmlFor="remember-me"
                     className="cursor-pointer font-normal"
                   >
                     Remember me
                   </Label>
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
+                {success && <p className="text-sm text-green-500">{success}</p>}
               </div>
             </CardContent>
             <CardFooter className="flex-col gap-2 mt-4">
@@ -127,7 +108,7 @@ export default function SignUp() {
                 className="w-full"
                 disabled={mutation.isPending}
               >
-                {mutation.isPending ? "Creating account..." : "Sign Up"}
+                {mutation.isPending ? "Signing in..." : "Sign in"}
               </Button>
             </CardFooter>
           </form>
@@ -136,13 +117,13 @@ export default function SignUp() {
         <Card className="rounded-xl mt-4">
           <CardContent className="flex items-center justify-center gap-1 ">
             <CardDescription className="text-base">
-              Already have an account?
+              Not a member?
             </CardDescription>
             <NavLink
-              to="/login"
+              to="/signup"
               className="text-sm font-medium underline-offset-4 hover:underline ml-1"
             >
-              Login
+              Create an account
             </NavLink>
           </CardContent>
         </Card>

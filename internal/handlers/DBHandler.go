@@ -1,5 +1,4 @@
-// Package handlers is a package that contain the handlers for several services
-// e.g. database
+// Package handlers contains HTTP handlers for the CourseLite service layer.
 package handlers
 
 import (
@@ -10,17 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// DBHandler manages the database connection pool.
 type DBHandler struct {
 	pool  *pgxpool.Pool
 	DBurl string
 }
 
+// NewDBHandler creates a new DBHandler with the given database URL.
 func NewDBHandler(dbURL string) *DBHandler {
 	return &DBHandler{
 		DBurl: dbURL,
 	}
 }
 
+// Start initializes the database connection pool and returns a Queries instance.
+// It pings the database to verify the connection and returns an error if unsuccessful.
 func (h *DBHandler) Start(ctx context.Context) (*DB.Queries, error) {
 	pool, err := pgxpool.New(ctx, h.DBurl)
 	if err != nil {
@@ -37,6 +40,7 @@ func (h *DBHandler) Start(ctx context.Context) (*DB.Queries, error) {
 	return DB.New(h.pool), nil
 }
 
+// Stop closes the database connection pool.
 func (h *DBHandler) Stop() {
 	if h.pool != nil {
 		h.pool.Close()

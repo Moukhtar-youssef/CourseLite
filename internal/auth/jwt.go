@@ -1,3 +1,4 @@
+// Package auth provides password hashing and verification using Argon2id and Token Handling
 package auth
 
 import (
@@ -15,18 +16,31 @@ var (
 	ErrExpiredToken = errors.New("expired token")
 )
 
+// Claims represents the JWT token payload containing user identity
+// information and standard JWT claims. It is used for both access
+// and refresh tokens.
 type Claims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Type   string `json:"type"`
+	UserID     string `json:"user_id"`
+	Email      string `json:"email"`
+	ProfilePic string `json:"profilePic"`
+	Role       string `json:"role"`
+	Type       string `json:"type"`
 	jwt.RegisteredClaims
 }
 
-func NewAccessToken(userID, email, secret string) (string, error) {
+// NewAccessToken generates a new JWT access token for the given user.
+// It takes userID, email, and secret as parameters and returns the token string and any error.
+// The token expires after 15 minutes.
+func NewAccessToken(userID, email, profilePic, role, secret string) (string, error) {
+	if profilePic == "" {
+		profilePic = "Placeholder for the normal userpic"
+	}
 	claims := Claims{
-		UserID: userID,
-		Email:  email,
-		Type:   "access",
+		UserID:     userID,
+		Email:      email,
+		ProfilePic: profilePic,
+		Role:       role,
+		Type:       "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
 			Issuer:    "courselite",
@@ -39,13 +53,21 @@ func NewAccessToken(userID, email, secret string) (string, error) {
 		SignedString([]byte(secret))
 }
 
-func NewRefreshToken(userID, email, secret string) (string, string, error) {
+// NewRefreshToken generates a new JWT refresh token for the given user.
+// It takes userID, email, and secret as parameters and returns the token string,
+// the JWT ID (jti), and any error. The token expires after 7 days.
+func NewRefreshToken(userID, email, profilePic, role, secret string) (string, string, error) {
 	jti := uuid.NewString()
+	if profilePic == "" {
+		profilePic = "Placeholder for the normal userpic"
+	}
 
 	claims := Claims{
-		UserID: userID,
-		Email:  email,
-		Type:   "refresh",
+		UserID:     userID,
+		Email:      email,
+		ProfilePic: profilePic,
+		Role:       role,
+		Type:       "refresh",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			Issuer:    "courselite",
@@ -60,10 +82,13 @@ func NewRefreshToken(userID, email, secret string) (string, string, error) {
 	return token, jti, err
 }
 
-func VerifyToken(tokenStr, secret string) (*Claims, error) {
+// VerifyToken validates a JWT token string using the provided secret.
+// It returns the claims if the token is valid, or an error if the token
+// is invalid or expired.
+func VerifyToken(tokenStr, secret string) (Claims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenStr,
-		&Claims{},
+		Claims{},
 		func(t *jwt.Token) (any, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, ErrInvalidToken
@@ -74,20 +99,22 @@ func VerifyToken(tokenStr, secret string) (*Claims, error) {
 	)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrExpiredToken
+			return Claims{}, ErrExpiredToken
 		}
-		return nil, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
-	claims, ok := token.Claims.(*Claims)
+	claims, ok := token.Claims.(Claims)
 
 	if !ok || !token.Valid {
-		return nil, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
 	return claims, nil
 }
 
+// HashToken generates a SHA-256 hash of the given token string.
+// It returns the hexadecimal encoded hash string.
 func HashToken(token string) string {
 	hash := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(hash[:])

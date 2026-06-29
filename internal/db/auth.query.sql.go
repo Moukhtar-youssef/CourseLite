@@ -13,15 +13,8 @@ import (
 )
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
-INSERT INTO refresh_tokens (
-    token_id,
-    user_id,
-    token_hash,
-    expires_at,
-    user_agent,
-    ip_address
-)
-VALUES ($1, $2, $3, $4,$5,$6)
+INSERT INTO refresh_tokens (token_id, user_id, token_hash, expires_at, user_agent, ip_address)
+    VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateRefreshTokenParams struct {
@@ -47,8 +40,9 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash)
-VALUES ($1, $2, $3)
-RETURNING id, name, email, password_hash, oauth_provider, oauth_id, role, created_at
+    VALUES ($1, $2, $3)
+RETURNING
+    id, name, email, password_hash, oauth_provider, oauth_id, role, userpfpurl, created_at
 `
 
 type CreateUserParams struct {
@@ -68,6 +62,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.OauthProvider,
 		&i.OauthID,
 		&i.Role,
+		&i.Userpfpurl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -86,7 +81,7 @@ func (q *Queries) DeleteAllRefreshTokens(ctx context.Context, userID uuid.UUID) 
 const deleteAllRefreshTokensExcept = `-- name: DeleteAllRefreshTokensExcept :exec
 DELETE FROM refresh_tokens
 WHERE user_id = $1
-AND token_id != $2
+    AND token_id != $2
 `
 
 type DeleteAllRefreshTokensExceptParams struct {
@@ -122,7 +117,7 @@ func (q *Queries) DeleteRefreshToken(ctx context.Context, tokenHash string) erro
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM refresh_tokens
 WHERE token_id = $1
-AND user_id = $2
+    AND user_id = $2
 `
 
 type DeleteSessionParams struct {
@@ -136,9 +131,14 @@ func (q *Queries) DeleteSession(ctx context.Context, arg DeleteSessionParams) er
 }
 
 const emailExists = `-- name: EmailExists :one
-SELECT EXISTS (
-    SELECT 1 FROM users WHERE email = $1
-) AS exists
+SELECT
+    EXISTS (
+        SELECT
+            1
+        FROM
+            users
+        WHERE
+            email = $1) AS exists
 `
 
 func (q *Queries) EmailExists(ctx context.Context, email string) (bool, error) {
@@ -149,8 +149,12 @@ func (q *Queries) EmailExists(ctx context.Context, email string) (bool, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, oauth_provider, oauth_id, role, created_at FROM users
-WHERE email = $1
+SELECT
+    id, name, email, password_hash, oauth_provider, oauth_id, role, userpfpurl, created_at
+FROM
+    users
+WHERE
+    email = $1
 LIMIT 1
 `
 
@@ -165,14 +169,19 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.OauthProvider,
 		&i.OauthID,
 		&i.Role,
+		&i.Userpfpurl,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, oauth_provider, oauth_id, role, created_at FROM users
-WHERE id = $1
+SELECT
+    id, name, email, password_hash, oauth_provider, oauth_id, role, userpfpurl, created_at
+FROM
+    users
+WHERE
+    id = $1
 LIMIT 1
 `
 
@@ -187,15 +196,20 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.OauthProvider,
 		&i.OauthID,
 		&i.Role,
+		&i.Userpfpurl,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserIDByResetToken = `-- name: GetUserIDByResetToken :one
-SELECT user_id FROM password_reset_tokens
-WHERE token = $1
-AND expires_at > NOW()
+SELECT
+    user_id
+FROM
+    password_reset_tokens
+WHERE
+    token = $1
+    AND expires_at > NOW()
 LIMIT 1
 `
 
@@ -207,8 +221,12 @@ func (q *Queries) GetUserIDByResetToken(ctx context.Context, token string) (uuid
 }
 
 const getUserRole = `-- name: GetUserRole :one
-SELECT role FROM users
-WHERE id = $1
+SELECT
+    ROLE
+FROM
+    users
+WHERE
+    id = $1
 LIMIT 1
 `
 
@@ -226,9 +244,12 @@ SELECT
     ip_address,
     created_at,
     expires_at
-FROM refresh_tokens
-WHERE user_id = $1
-ORDER BY created_at DESC
+FROM
+    refresh_tokens
+WHERE
+    user_id = $1
+ORDER BY
+    created_at DESC
 `
 
 type GetUserSessionsRow struct {
@@ -266,12 +287,16 @@ func (q *Queries) GetUserSessions(ctx context.Context, userID uuid.UUID) ([]GetU
 }
 
 const refreshTokenExists = `-- name: RefreshTokenExists :one
-SELECT EXISTS (
-    SELECT 1 FROM refresh_tokens
-    WHERE user_id = $1
-    AND token_hash = $2
-    AND expires_at > NOW()
-) AS exists
+SELECT
+    EXISTS (
+        SELECT
+            1
+        FROM
+            refresh_tokens
+        WHERE
+            user_id = $1
+            AND token_hash = $2
+            AND expires_at > NOW()) AS exists
 `
 
 type RefreshTokenExistsParams struct {
@@ -287,9 +312,12 @@ func (q *Queries) RefreshTokenExists(ctx context.Context, arg RefreshTokenExists
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :exec
-UPDATE users
-SET password_hash = $2
-WHERE id = $1
+UPDATE
+    users
+SET
+    password_hash = $2
+WHERE
+    id = $1
 `
 
 type UpdateUserPasswordParams struct {
@@ -304,10 +332,12 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 
 const upsertOAuthUser = `-- name: UpsertOAuthUser :one
 INSERT INTO users (name, email, oauth_provider, oauth_id)
-VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, $3, $4)
 ON CONFLICT (email)
-DO UPDATE SET name = EXCLUDED.name
-RETURNING id, name, email, password_hash, oauth_provider, oauth_id, role, created_at
+    DO UPDATE SET
+        name = EXCLUDED.name
+    RETURNING
+        id, name, email, password_hash, oauth_provider, oauth_id, role, userpfpurl, created_at
 `
 
 type UpsertOAuthUserParams struct {
@@ -333,6 +363,7 @@ func (q *Queries) UpsertOAuthUser(ctx context.Context, arg UpsertOAuthUserParams
 		&i.OauthProvider,
 		&i.OauthID,
 		&i.Role,
+		&i.Userpfpurl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -340,11 +371,11 @@ func (q *Queries) UpsertOAuthUser(ctx context.Context, arg UpsertOAuthUserParams
 
 const upsertPasswordResetToken = `-- name: UpsertPasswordResetToken :exec
 INSERT INTO password_reset_tokens (user_id, token, expires_at)
-VALUES ($1, $2, $3)
+    VALUES ($1, $2, $3)
 ON CONFLICT (user_id)
-DO UPDATE SET
-    token = EXCLUDED.token,
-    expires_at = EXCLUDED.expires_at
+    DO UPDATE SET
+        token = EXCLUDED.token,
+        expires_at = EXCLUDED.expires_at
 `
 
 type UpsertPasswordResetTokenParams struct {

@@ -19,7 +19,7 @@ type Course struct {
 	Description *string   `json:"description"`
 	Price       int32     `json:"price"`
 	Currency    string    `json:"currency"`
-	Published   *bool     `json:"published"`
+	Published   bool      `json:"published"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -59,9 +59,9 @@ type Payment struct {
 }
 
 type Progress struct {
-	UserID      uuid.UUID `json:"user_id"`
-	LessonID    uuid.UUID `json:"lesson_id"`
-	CompletedAt time.Time `json:"completed_at"`
+	UserID      uuid.UUID          `json:"user_id"`
+	LessonID    uuid.UUID          `json:"lesson_id"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 }
 
 type RefreshToken struct {
@@ -70,7 +70,7 @@ type RefreshToken struct {
 	TokenHash  string      `json:"token_hash"`
 	ExpiresAt  time.Time   `json:"expires_at"`
 	CreatedAt  time.Time   `json:"created_at"`
-	Revoked    *bool       `json:"revoked"`
+	Revoked    bool        `json:"revoked"`
 	ReplacedBy pgtype.UUID `json:"replaced_by"`
 	UserAgent  *string     `json:"user_agent"`
 	IpAddress  *string     `json:"ip_address"`
@@ -92,6 +92,7 @@ type User struct {
 	OauthProvider *string   `json:"oauth_provider"`
 	OauthID       *string   `json:"oauth_id"`
 	Role          string    `json:"role"`
+	Userpfpurl    string    `json:"userpfpurl"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 

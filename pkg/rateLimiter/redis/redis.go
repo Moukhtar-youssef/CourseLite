@@ -1,4 +1,4 @@
-// Package redis provides a Redis-backed, sliding-window rate limiter.
+// Package redisrl provides a Redis-backed, sliding-window rate limiter.
 // It uses a Lua script executed atomically by Redis so the check-and-record
 // operation is race-free even across multiple application instances.
 //
@@ -85,7 +85,6 @@ func (r *RedisRateLimiter) Allow(ctx context.Context, key string,
 	now := time.Now()
 	nowMs := now.UnixMilli()
 	windowMs := r.cfg.Window.Milliseconds()
-	// Keep the key alive for one full window beyond the last request.
 	ttlMs := windowMs * 2
 
 	vals, err := r.script.Run(
@@ -95,17 +94,15 @@ func (r *RedisRateLimiter) Allow(ctx context.Context, key string,
 	).Int64Slice()
 	if err != nil {
 		return ratelimiter.Result{}, fmt.Errorf(
-			"ratelimiter/redis: lua script error: %w", err)
+			"ratelimiter/redis: lua script error: %w", err,
+		)
 	}
 
 	allowed := vals[0] == 1
 	count := int(vals[1])
 	oldestMs := vals[2]
 
-	remaining := r.cfg.Limit - count
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(r.cfg.Limit-count, 0)
 
 	resetAt := now.Add(r.cfg.Window)
 	var retryAfter time.Duration
@@ -113,10 +110,7 @@ func (r *RedisRateLimiter) Allow(ctx context.Context, key string,
 	if !allowed && oldestMs > 0 {
 		oldest := time.UnixMilli(oldestMs)
 		resetAt = oldest.Add(r.cfg.Window)
-		retryAfter = time.Until(resetAt)
-		if retryAfter < 0 {
-			retryAfter = 0
-		}
+		retryAfter = max(time.Until(resetAt), 0)
 	}
 
 	return ratelimiter.Result{
@@ -140,4 +134,6 @@ func (r *RedisRateLimiter) Reset(ctx context.Context, key string) error {
 
 // Close is a no-op for the Redis implementation because the caller owns the
 // client lifecycle. Close the redis.Client itself when shutting down.
-func (r *RedisRateLimiter) Close() error { return nil }
+func (r *RedisRateLimiter) Close() error {
+	return r.client.Close()
+}

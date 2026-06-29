@@ -1,3 +1,4 @@
+// Package auth provides password hashing and verification using Argon2id and Token Handling
 package auth
 
 import (
@@ -6,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 
@@ -27,10 +29,14 @@ var argonParallelism = uint8(runtime.NumCPU()) //nolint:gochecknoglobals
 var argonSem = make(chan struct{}, runtime.NumCPU()) //nolint:gochecknoglobals
 
 var (
-	ErrInvalidHash         = errors.New("password: hash format is invalid")
+	// ErrInvalidHash is returned when the hash format is invalid.
+	ErrInvalidHash = errors.New("password: hash format is invalid")
+	// ErrIncompatibleVersion is returned when the argon2 version is incompatible.
 	ErrIncompatibleVersion = errors.New("password: incompatible argon2 version")
 )
 
+// HashPassword hashes a plaintext password using Argon2id and returns
+// the encoded hash as a PHC-formatted string.
 func HashPassword(plain string) (string, error) {
 	salt := make([]byte, argonSaltLen)
 	if _, err := rand.Read(salt); err != nil {
@@ -61,18 +67,22 @@ func HashPassword(plain string) (string, error) {
 	return encoded, nil
 }
 
-// CheckPassword verifies plain against an Argon2id PHC string produced by
-// HashPassword. It reads all parameters (memory, iterations, parallelism)
-// directly from the stored hash, so old hashes stay verifiable even after
-// you tune the parameters for future passwords.
-func CheckPassword(plain, encoded string) bool {
+// CheckPassword verifies a plaintext password against an Argon2id PHC string.
+// It reads all parameters (memory, iterations, parallelism) directly from
+// the stored hash, so old hashes stay verifiable even after tuning parameters.
+func CheckPassword(plain, encoded string) (bool, error) {
 	p, salt, expectedHash, err := decodeHash(encoded)
 	if err != nil {
-		return false
+		return false, nil
 	}
 
 	argonSem <- struct{}{}
 	defer func() { <-argonSem }()
+
+	if len(expectedHash) > math.MaxUint32 {
+		return false, errors.New("hash too large")
+	}
+	length := uint32(len(expectedHash))
 
 	actualHash := argon2.IDKey(
 		[]byte(plain),
@@ -80,10 +90,10 @@ func CheckPassword(plain, encoded string) bool {
 		p.iterations,
 		p.memory,
 		p.parallelism,
-		uint32(len(expectedHash)),
+		length,
 	)
 
-	return subtle.ConstantTimeCompare(actualHash, expectedHash) == 1
+	return subtle.ConstantTimeCompare(actualHash, expectedHash) == 1, nil
 }
 
 type argonParams struct {

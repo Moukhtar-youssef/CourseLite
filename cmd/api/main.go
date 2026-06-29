@@ -12,15 +12,16 @@ import (
 
 	"github.com/Moukhtar-youssef/CourseLite/internal/handlers"
 	"github.com/Moukhtar-youssef/CourseLite/internal/server"
+	"github.com/Moukhtar-youssef/CourseLite/internal/utils"
 	"github.com/joho/godotenv"
 )
 
 func gracefulShutdown(
-	apiServer *http.Server,
+	Server *server.Server,
 	dbHandler *handlers.DBHandler,
 	done chan bool,
 ) {
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	<-sigCh
 
@@ -30,13 +31,22 @@ func gracefulShutdown(
 		30*time.Second)
 	defer shutdownCancel()
 
-	if err := apiServer.Shutdown(shutdownCtx); err != nil {
+	if err := Server.HTTPServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("server forced to shutdown: %v", err)
 	}
-	log.Println("Server shutdown")
+	log.Println("HTTPserver shutdown")
 
 	dbHandler.Stop()
 	log.Println("Database shutdown")
+
+	if Server.LoginRateLimiter != nil {
+		Server.LoginRateLimiter.Close()
+		log.Println("Login RateLimiter shutdown")
+	}
+	if Server.RateLimiter != nil {
+		Server.RateLimiter.Close()
+		log.Println("Ratelimiter shutdown")
+	}
 
 	log.Println("server exiting")
 	done <- true
@@ -58,17 +68,18 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
-	httpServer := server.NewServer(queries)
+	Server := server.NewServer(queries)
 
 	done := make(chan bool)
 
-	go gracefulShutdown(httpServer, dbHandler, done)
+	go gracefulShutdown(Server, dbHandler, done)
 
-	log.Printf("server starting on %s", httpServer.Addr)
+	// #nosec G706
+	log.Printf("server starting on %s", utils.SanitizeLog(Server.HTTPServer.Addr))
 
-	if err := httpServer.ListenAndServe(); err != nil &&
+	if err := Server.HTTPServer.ListenAndServe(); err != nil &&
 		err != http.ErrServerClosed {
-		panic(fmt.Sprintf("http server error: %s", err))
+		fmt.Sprintf("http server error: %s", err)
 	}
 
 	<-done

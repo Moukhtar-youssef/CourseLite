@@ -1,0 +1,56 @@
+version: "2"
+
+run:
+  timeout: 5m
+  concurrency: 4
+
+linters:
+  default: none
+  enable:
+    - govet
+    - errcheck
+    - revive
+    - staticcheck
+    - ineffassign
+    - gocyclo
+    - dupl
+    - unused
+    - lll
+    - gosec
+
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: indent-error-flow
+        - name: var-naming
+        - name: import-shadowing
+        - name: package-comments
+
+    lll:
+      line-length: 120
+
+    gocyclo:
+      min-complexity: 15
+
+    dupl:
+      threshold: 100
+
+  exclusions:
+    rules:
+      - linters:
+          - gosec
+        text: "G401"
+
+      - linters:
+          - gosec
+        text: "G115"
+        path: "internal/auth/password.go"
+
+      - linters:
+          - gosec
+        text: "G703"
+        path: "internal/server/routes.go"
+
+    paths:
+      - "client/"

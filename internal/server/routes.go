@@ -1,5 +1,5 @@
-// Package server is a package that contain the main routes and the main struct
-// for server
+// Package server provides the HTTP server setup and route registration
+// for the CourseLite application.
 package server
 
 import (
@@ -13,6 +13,7 @@ import (
 
 	"github.com/Moukhtar-youssef/CourseLite/internal/handlers"
 	"github.com/Moukhtar-youssef/CourseLite/internal/middleware"
+	"github.com/Moukhtar-youssef/CourseLite/internal/utils"
 	ratelimiter "github.com/Moukhtar-youssef/CourseLite/pkg/rateLimiter"
 	"github.com/Moukhtar-youssef/CourseLite/pkg/rateLimiter/local"
 	redisrl "github.com/Moukhtar-youssef/CourseLite/pkg/rateLimiter/redis"
@@ -53,20 +54,21 @@ func buildRateLimiter() ratelimiter.RateLimiter {
 		log.Fatalf("cannot connect to Redis: %v", err)
 	}
 
-	log.Printf("Using Redis rate limiter (%s)", redisURL)
+	// #nosec G706
+	log.Printf("Using Redis rate limiter (%s)", utils.SanitizeLog(redisURL))
 	return redisrl.New(cfg, client)
 }
 
+// RegisterRoutes configures and returns the HTTP router with all application routes.
+// It sets up middleware, rate limiting, authentication, course, and static file handlers.
+// The staticDir parameter specifies the directory for serving static files (can be empty).
 func (s *Server) RegisterRoutes(staticDir string) http.Handler {
-	rl := buildRateLimiter()
-	defer rl.Close()
-
-	loginLimiter := local.New(ratelimiter.Config{
+	s.RateLimiter = buildRateLimiter()
+	s.LoginRateLimiter = local.New(ratelimiter.Config{
 		Limit:     5,
 		Window:    15 * time.Minute,
 		KeyPrefix: "login:",
 	})
-	defer loginLimiter.Close()
 
 	r := chi.NewRouter()
 
@@ -75,7 +77,7 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
-	r.Use(middleware.RateLimit(rl, middleware.Options{
+	r.Use(middleware.RateLimit(s.RateLimiter, middleware.Options{
 		KeyFunc:  middleware.KeyByIP,
 		SkipFunc: skipHealthChecks,
 	}))
@@ -94,11 +96,11 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 	}
 
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		})
-		r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/hello", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"message": "hello"})
 		})
@@ -106,10 +108,10 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Get("/sessions", authHandler.Session)
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RateLimit(loginLimiter, middleware.Options{
+				r.Use(middleware.RateLimit(s.LoginRateLimiter, middleware.Options{
 					KeyFunc: middleware.KeyByIP,
-					OnLimitReached: func(w http.ResponseWriter, r *http.Request) {
-						handlers.JsonMessage(w,
+					OnLimitReached: func(w http.ResponseWriter, _ *http.Request) {
+						handlers.JSONMessage(w,
 							"Too many login attempts. Try again in 15 minutes",
 							http.StatusTooManyRequests)
 					},
@@ -125,38 +127,24 @@ func (s *Server) RegisterRoutes(staticDir string) http.Handler {
 		r.Route("/courses", func(r chi.Router) {
 			r.Get("/", courseHandler.GetAll)
 			// r.Post("/")
-			// r.Route("/{id}", func(r chi.Router) {
-			// r.Get("/")
-			// r.Put("/")
-			// r.Delete("/")
-			// r.Post("/publish")
-			// r.Post("/sections")
-			// r.Get("/progress")
+			r.Route("/{slug}", func(r chi.Router) {
+				r.Get("/", courseHandler.GetCourse)
+				r.Get("/enrolled", courseHandler.IsEnrolled)
+			})
 		})
 	})
-	// r.Route("/lessons/{id}", func(r chi.Router) {
-	// 	r.Post("/upload-url")
-	// 	r.Post("/stream")
-	// 	r.Put("/")
-	// 	r.Post("/complete")
-	// })
-	// r.Route("/sections/{id}", func(r chi.Router) {
-	// 	r.Put("/")
-	// 	r.Post("/lessons")
-	// })
-	// })
-
+	// #nosec G706
 	if staticDir != "" {
 		fs := http.FileServer(http.Dir(staticDir))
 		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 			path := filepath.Join(staticDir, filepath.Clean(r.URL.Path))
-			if _, err := os.Stat(path); os.IsNotExist(err) {
+			// #nosec G706
+			if _, err := os.Stat(utils.SanitizeLog(path)); os.IsNotExist(err) {
 				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 				return
 			}
 			fs.ServeHTTP(w, r)
 		})
 	}
-
 	return r
 }
